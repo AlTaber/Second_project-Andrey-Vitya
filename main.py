@@ -93,16 +93,26 @@ class Board:
         self.board[cell1[0]][cell1[1]] = self.board[cell2[0]][cell2[1]]
         self.board[cell2[0]][cell2[1]] = cl1
 
+    def replace(self, cell, material_id):
+        self.board[cell[0]][cell[1]] = self.generate_material(material_id)
+
     def tick_board(self):
         temp = copy.deepcopy(self.board)
-        for i in range(self.width):
+        random_i = list(range(self.width))
+        random.shuffle(random_i)
+        for i in random_i:
             for j in range(self.height):
                 element = temp[j][i]
+                # свойства элемента
+                if element.type == "vapor":
+                    if random.randint(0, 50) == 0:
+                        self.replace((j, i), "water")
+                # физика элемента
                 if element.cls == "falling":
                     if j != self.height - 1:
                         if element.weight > temp[j + 1][i].weight:
                             self.switch((j, i), (j + 1, i))
-                elif element.cls == "liquid":
+                elif element.cls in ["liquid", "gas"]:
                     if j != self.height - 1:
                         if element.weight > temp[j + 1][i].weight:
                             self.switch((j, i), (j + 1, i))
@@ -116,19 +126,21 @@ class Board:
                                     d_step_r_l.append(1)
                             if d_step_r_l:
                                 self.switch((j, i), (j + 1, i + random.choice(d_step_r_l)))
-                    step_r_l = []
-                    if i != 0:
-                        if temp[j][i - 1].weight < element.weight:
-                            step_r_l.append(-1)
-                    if i != self.width - 1:
-                        if temp[j][i + 1].weight < element.weight:
-                            step_r_l.append(1)
-                    if step_r_l:
-                        self.switch((j, i), (j, i + random.choice(step_r_l)))
+                            else:
+                                step_r_l = []
+                                if i != 0:
+                                    if temp[j][i - 1].weight < element.weight:
+                                        step_r_l.append(-1)
+                                if i != self.width - 1:
+                                    if temp[j][i + 1].weight < element.weight:
+                                        step_r_l.append(1)
+                                if step_r_l:
+                                    self.switch((j, i), (j, i + random.choice(step_r_l)))
 
     def generate_material(self, m_type):
         return {"air": Sandbox.GameObjects.Air(), "sand": Sandbox.GameObjects.Sand(),
-                "water": Sandbox.GameObjects.Water(), "iron": Sandbox.GameObjects.Iron()}[m_type]
+                "water": Sandbox.GameObjects.Water(), "iron": Sandbox.GameObjects.Iron(),
+                "vapor": Sandbox.GameObjects.Vapor()}[m_type]
 
 
 class ManageMenu:
@@ -156,7 +168,7 @@ class Sandbox:
         running = True
         hold = False
         pygame.init()
-        self.board.set_material("iron")
+        self.board.set_material("water")
         self.board.set_brush(3)
         fps_font = pygame.font.Font(None, 32)
         fps_pos = (self.board.left * 2 + self.board.width * self.board.cell_size, 1)
@@ -171,9 +183,9 @@ class Sandbox:
                 if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                     hold = False
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                    self.board.set_material("water")
+                    self.board.set_material("vapor")
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
-                    self.board.set_material("sand")
+                    self.board.set_material("air")
             if hold:
                 self.board.get_click(pygame.mouse.get_pos())
             self.board.render(screen)
@@ -206,13 +218,13 @@ class Sandbox:
                 self.temperature = 0
                 self.cls = "gas"
                 self.soluble = False
-                self.durability = 0
+                self.durability = 1
 
         class Falling(Object):
             def __init__(self):
                 super().__init__()
                 self.temperature = 0
-                self.durability = 0
+                self.durability = 1
                 self.cls = "falling"
 
         class Liquid(Object):
@@ -220,7 +232,7 @@ class Sandbox:
                 super().__init__()
                 self.cls = "liquid"
                 self.temperature = 0
-                self.durability = 0
+                self.durability = 1
                 self.soluble = False
 
         class Solid(Object):
@@ -228,7 +240,7 @@ class Sandbox:
                 super().__init__()
                 self.cls = "solid"
                 self.temperature = 0
-                self.durability = 0
+                self.durability = 1
 
         # Основные вещества
         class Air(Gas):
@@ -254,6 +266,21 @@ class Sandbox:
                 self.color = approximate_color(30, 30, 200, 10)
                 self.weight = 7
                 self.durability = 10
+
+        class Iron(Solid):
+            def __init__(self):
+                super().__init__()
+                self.type = "iron"
+                self.color = approximate_color(173, 173, 173, 2)
+                self.weight = 20
+                self.durability = 7
+
+        class Vapor(Gas):
+            def __init__(self):
+                super().__init__()
+                self.type = "vapor"
+                self.color = approximate_color(222, 222, 222, 3)
+                self.weight = -11
 
 
 
