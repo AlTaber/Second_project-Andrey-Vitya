@@ -168,13 +168,68 @@ class Board:
 class ManageMenu:
     def __init__(self, board: Board):
         self.link_with_board = board
-        self.left_menu = board.left * 2 + board.cell_size * board.width
-        self.top_menu = board.top
-
+        self.left = board.left * 2 + board.cell_size * board.width
+        self.top = board.top
+        self.buttons = []
 
     class Button:
+        def __init__(self, parent, coords, size, icon_name, button_type, item_id):
+            self.coords = coords
+            self.icon_name = icon_name
+            self.button_type = button_type
+            self.action = item_id
+            self.parent = parent
+            self.size = size
+            self.selected = False
+            self.mouse_on = False
+
+        def activate(self):
+            if self.button_type == 'B':
+                self.parent.set_brush(self.action)
+            elif self.button_type == 'M':
+                self.parent.set_material(self.action)
+            elif self.button_type == 'C':
+                self.parent.custom_action(self.action)
+
+    def render(self, surf):
+        for button in self.buttons:
+            button_color = None
+            if button.selected:
+                button_color = (16, 73, 169)
+            elif button.mouse_on:
+                button_color = (120, 120, 120)
+            else:
+                button_color = (89, 89, 89)
+            pygame.draw.rect(surf, color=button_color, rect=(
+                self.left + button.coords[0],
+                self.top + button.coords[1],
+                button.size[0],
+                button.size[1]))
+
+    def set_brush(self, size):
+        self.link_with_board.set_brush(size)
+
+    def set_material(self, material_id):
+        self.link_with_board.set_material(material_id)
+
+    def custom_action(self, action_id):
         pass
 
+    def get_button(self, mouse_pos):
+        for button in self.buttons:
+            if button.coords[0] + self.left <= mouse_pos[0] <= button.coords[0] + button.size[0] + self.left and \
+               button.coords[1] + self.top <= mouse_pos[1] <= button.coords[1] + button.size[1] + self.top:
+                return button
+        return None
+
+    def on_click(self, button):
+        if button is None:
+            return
+        button.activate()
+
+    def get_click(self, mouse_pos):
+        button = self.get_button(mouse_pos)
+        self.on_click(button)
 
 
 class Sandbox:
