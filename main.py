@@ -96,10 +96,23 @@ class Board:
     def replace(self, cell, material_id):
         self.board[cell[0]][cell[1]] = self.generate_material(material_id)
 
+    def get_neighbors_coords(self, cell):
+        result = []
+        for coords in [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)]:
+            if (0 <= cell[0] + coords[0] < self.height) and (0 <= cell[1] + coords[1] < self.width):
+                result.append((cell[0] + coords[0], cell[1] + coords[1]))
+        return result
+
+    def fire(self, coords):
+        element = self.board[coords[0]][coords[1]]
+        if element.type == "water":
+            self.replace(coords, "vapor")
+
     def tick_board(self):
         temp = copy.deepcopy(self.board)
         random_i = list(range(self.width))
         random.shuffle(random_i)
+        to_switch = []
         for i in random_i:
             for j in range(self.height):
                 element = temp[j][i]
@@ -107,15 +120,22 @@ class Board:
                 if element.type == "vapor":
                     if random.randint(0, 50) == 0:
                         self.replace((j, i), "water")
+                if element.type == "fire":
+                    if element.temperature <= 1:
+                        self.replace((j, i), "air")
+                    else:
+                        self.board[j][i].fade()
+                    for coords in self.get_neighbors_coords((j, i)):
+                        self.fire(coords)
                 # физика элемента
                 if element.cls == "falling":
                     if j != self.height - 1:
                         if element.weight > temp[j + 1][i].weight:
-                            self.switch((j, i), (j + 1, i))
+                            to_switch.append(((j, i), (j + 1, i)))
                 elif element.cls in ["liquid", "gas"]:
                     if j != self.height - 1:
                         if element.weight > temp[j + 1][i].weight:
-                            self.switch((j, i), (j + 1, i))
+                            to_switch.append(((j, i), (j + 1, i)))
                         else:
                             d_step_r_l = []
                             if i != 0:
@@ -125,7 +145,7 @@ class Board:
                                 if element.weight > temp[j + 1][i + 1].weight:
                                     d_step_r_l.append(1)
                             if d_step_r_l:
-                                self.switch((j, i), (j + 1, i + random.choice(d_step_r_l)))
+                                to_switch.append(((j, i), (j + 1, i + random.choice(d_step_r_l))))
                             else:
                                 step_r_l = []
                                 if i != 0:
@@ -135,12 +155,14 @@ class Board:
                                     if temp[j][i + 1].weight < element.weight:
                                         step_r_l.append(1)
                                 if step_r_l:
-                                    self.switch((j, i), (j, i + random.choice(step_r_l)))
+                                    to_switch.append(((j, i), (j, i + random.choice(step_r_l))))
+        for co in to_switch:
+            self.switch(co[0], co[1])
 
     def generate_material(self, m_type):
         return {"air": Sandbox.GameObjects.Air(), "sand": Sandbox.GameObjects.Sand(),
                 "water": Sandbox.GameObjects.Water(), "iron": Sandbox.GameObjects.Iron(),
-                "vapor": Sandbox.GameObjects.Vapor()}[m_type]
+                "vapor": Sandbox.GameObjects.Vapor(), "fire": Sandbox.GameObjects.Fire()}[m_type]
 
 
 class ManageMenu:
@@ -168,7 +190,7 @@ class Sandbox:
         running = True
         hold = False
         pygame.init()
-        self.board.set_material("water")
+        self.board.set_material("iron")
         self.board.set_brush(3)
         fps_font = pygame.font.Font(None, 32)
         fps_pos = (self.board.left * 2 + self.board.width * self.board.cell_size, 1)
@@ -183,9 +205,9 @@ class Sandbox:
                 if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                     hold = False
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                    self.board.set_material("vapor")
+                    self.board.set_material("water")
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
-                    self.board.set_material("air")
+                    self.board.set_material("fire")
             if hold:
                 self.board.get_click(pygame.mouse.get_pos())
             self.board.render(screen)
@@ -204,18 +226,13 @@ class Sandbox:
                 self.type = None
                 self.color = None
                 self.weight = None
-                self.temperature = None
                 self.durability = None
                 self.soluble = None
-
-            def fire(self):
-                pass
 
         # Типы веществ
         class Gas(Object):
             def __init__(self):
                 super().__init__()
-                self.temperature = 0
                 self.cls = "gas"
                 self.soluble = False
                 self.durability = 1
@@ -223,7 +240,6 @@ class Sandbox:
         class Falling(Object):
             def __init__(self):
                 super().__init__()
-                self.temperature = 0
                 self.durability = 1
                 self.cls = "falling"
 
@@ -231,7 +247,6 @@ class Sandbox:
             def __init__(self):
                 super().__init__()
                 self.cls = "liquid"
-                self.temperature = 0
                 self.durability = 1
                 self.soluble = False
 
@@ -239,8 +254,12 @@ class Sandbox:
             def __init__(self):
                 super().__init__()
                 self.cls = "solid"
-                self.temperature = 0
                 self.durability = 1
+
+        class Special(Object):
+            def __init__(self):
+                super().__init__()
+                self.cls = "special"
 
         # Основные вещества
         class Air(Gas):
@@ -282,7 +301,17 @@ class Sandbox:
                 self.color = approximate_color(222, 222, 222, 3)
                 self.weight = -11
 
+        class Fire(Special):
+            def __init__(self):
+                super().__init__()
+                self.type = "fire"
+                self.color = [222, 89, 22]
+                self.weight = -100
+                self.temperature = 5
 
+            def fade(self):
+                self.temperature -= 1
+                self.color = {4: [194, 56, 6], 3: [161, 41, 8], 2: [135, 31, 12], 1: [102, 9, 9]}[self.temperature]
 
 sandbox = Sandbox()
 sandbox.run_game()
