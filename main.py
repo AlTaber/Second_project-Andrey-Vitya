@@ -41,6 +41,7 @@ class Board:
         self.cell_size = 30
         self.current_material = "air"
         self.brush = 1
+        self.pause = False
 
     def set_view(self, left, top, cell_size):
         self.left = left
@@ -96,6 +97,15 @@ class Board:
     def replace(self, cell, material_id):
         self.board[cell[0]][cell[1]] = self.generate_material(material_id)
 
+    def clear(self):
+        self.board = [[Sandbox.GameObjects.Air()] * self.width for _ in range(self.height)]
+
+    def set_pause(self, true):
+        if true:
+            self.pause = True
+        else:
+            self.pause = False
+
     def get_neighbors_coords(self, cell):
         result = []
         for coords in [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)]:
@@ -109,6 +119,8 @@ class Board:
             self.replace(coords, "vapor")
 
     def tick_board(self):
+        if self.pause:
+            return
         temp = copy.deepcopy(self.board)
         random_i = list(range(self.width))
         random.shuffle(random_i)
@@ -170,7 +182,32 @@ class ManageMenu:
         self.link_with_board = board
         self.left = board.left * 2 + board.cell_size * board.width
         self.top = board.top
+        self.all_sprites = pygame.sprite.Group()
         self.buttons = []
+
+        # Значения по умолчанию
+
+        self.button_width = 5
+
+        # Все кнопки менюшки
+
+        self.buttons.append(ManageMenu.Button(self, (5, 20), (40, 40), "empty.png", "B", 1))
+        self.buttons.append(ManageMenu.Button(self, (50, 20), (40, 40), "empty.png", "B", 3))
+        self.buttons.append(ManageMenu.Button(self, (95, 20), (40, 40), "empty.png", "B", 5))
+        self.buttons.append(ManageMenu.Button(self, (140, 20), (40, 40), "empty.png", "B", 7))
+
+        self.buttons.append(ManageMenu.Button(self, (5, 70), (40, 40), "air_icon.png", "M", "air"))
+        self.buttons.append(ManageMenu.Button(self, (50, 70), (40, 40), "sand_icon.png", "M", "sand"))
+        self.buttons.append(ManageMenu.Button(self, (95, 70), (40, 40), "water_icon.png", "M", "water"))
+        self.buttons.append(ManageMenu.Button(self, (140, 70), (40, 40), "iron_icon.png", "M", "iron"))
+        self.buttons.append(ManageMenu.Button(self, (5, 115), (40, 40), "fire_icon.png", "M", "fire"))
+        self.buttons.append(ManageMenu.Button(self, (50, 115), (40, 40), "vapor_icon.png", "M", "vapor"))
+
+        self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "empty.png", "C", "clear"))
+        self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "empty.png", "C", "pause"))
+
+    def set_button_width(self, width):
+        self.button_width = width
 
     class Button:
         def __init__(self, parent, coords, size, icon_name, button_type, item_id):
@@ -183,28 +220,50 @@ class ManageMenu:
             self.selected = False
             self.mouse_on = False
 
+            self.sprite = pygame.sprite.Sprite()
+            self.sprite.image = load_image(icon_name)
+            self.sprite.rect = self.sprite.image.get_rect()
+            self.sprite.rect.topleft = self.parent.left + coords[0] + self.parent.button_width, \
+                                       self.parent.top + coords[1] + self.parent.button_width
+            self.parent.all_sprites.add(self.sprite)
+
         def activate(self):
             if self.button_type == 'B':
+                for btn in self.parent.buttons:
+                    if btn.button_type == "B":
+                        btn.selected = False
+                self.selected = True
                 self.parent.set_brush(self.action)
             elif self.button_type == 'M':
+                for btn in self.parent.buttons:
+                    if btn.button_type == "M":
+                        btn.selected = False
+                self.selected = True
                 self.parent.set_material(self.action)
             elif self.button_type == 'C':
                 self.parent.custom_action(self.action)
 
     def render(self, surf):
         for button in self.buttons:
-            button_color = None
+            button_color_1 = (89, 89, 89)
+            button_color_2 = (220, 220, 220)
             if button.selected:
-                button_color = (16, 73, 169)
+                button_color_1 = (16, 73, 169)
+                button_color_2 = (18, 114, 204)
             elif button.mouse_on:
-                button_color = (120, 120, 120)
-            else:
-                button_color = (89, 89, 89)
-            pygame.draw.rect(surf, color=button_color, rect=(
+                button_color_1 = (150, 150, 150)
+                button_color_2 = (255, 255, 255)
+            pygame.draw.rect(surf, color=button_color_1, rect=(
                 self.left + button.coords[0],
                 self.top + button.coords[1],
                 button.size[0],
                 button.size[1]))
+            pygame.draw.rect(surf, color=button_color_2, rect=(
+                self.left + button.coords[0] + self.button_width,
+                self.top + button.coords[1] + self.button_width,
+                button.size[0] - self.button_width * 2,
+                button.size[1] - self.button_width * 2))
+        self.all_sprites.draw(surface=surf)
 
     def set_brush(self, size):
         self.link_with_board.set_brush(size)
@@ -213,7 +272,10 @@ class ManageMenu:
         self.link_with_board.set_material(material_id)
 
     def custom_action(self, action_id):
-        pass
+        if action_id == "clear":
+            self.link_with_board.clear()
+        elif action_id == "pause":
+            self.link_with_board.set_pause(not self.link_with_board.pause)
 
     def get_button(self, mouse_pos):
         for button in self.buttons:
@@ -231,41 +293,52 @@ class ManageMenu:
         button = self.get_button(mouse_pos)
         self.on_click(button)
 
+    def get_motion(self, mouse_pos):
+        button = self.get_button(mouse_pos)
+        for btn in self.buttons:
+            btn.mouse_on = False
+        if button is not None:
+            button.mouse_on = True
+
 
 class Sandbox:
     def __init__(self):
         self.board = Board(50, 43)
+        pygame.init()
         self.size = self.width, self.height = 1000, 692
+        self.screen = pygame.display.set_mode(self.size)
         self.board.set_view(2, 2, 16)
+        self.menu = ManageMenu(self.board)
+        self.menu.set_button_width(3)
 
     def run_game(self):
-        screen = pygame.display.set_mode(self.size)
+        screen = self.screen
         clock = pygame.time.Clock()
         max_fps = 30
         running = True
         hold = False
-        pygame.init()
-        self.board.set_material("iron")
-        self.board.set_brush(3)
+        self.board.set_material("air")
+        self.board.set_brush(1)
         fps_font = pygame.font.Font(None, 32)
         fps_pos = (self.board.left * 2 + self.board.width * self.board.cell_size, 1)
+
         while running:
-            screen.fill((70, 70, 70))
+            screen.fill((33, 10, 61))
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     hold = True
                     self.board.get_click(event.pos)
+                    self.menu.get_click(event.pos)
                 if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                     hold = False
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                    self.board.set_material("water")
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
-                    self.board.set_material("fire")
+                if event.type == pygame.MOUSEMOTION:
+                    self.menu.get_motion(event.pos)
             if hold:
                 self.board.get_click(pygame.mouse.get_pos())
             self.board.render(screen)
+            self.menu.render(screen)
             self.board.tick_board()
             clock.tick(max_fps)
             fps_now = str(clock.get_fps())[:4]
@@ -367,6 +440,7 @@ class Sandbox:
             def fade(self):
                 self.temperature -= 1
                 self.color = {4: [194, 56, 6], 3: [161, 41, 8], 2: [135, 31, 12], 1: [102, 9, 9]}[self.temperature]
+
 
 sandbox = Sandbox()
 sandbox.run_game()
