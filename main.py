@@ -191,10 +191,10 @@ class ManageMenu:
 
         # Все кнопки менюшки
 
-        self.buttons.append(ManageMenu.Button(self, (5, 20), (40, 40), "empty.png", "B", 1))
-        self.buttons.append(ManageMenu.Button(self, (50, 20), (40, 40), "empty.png", "B", 3))
-        self.buttons.append(ManageMenu.Button(self, (95, 20), (40, 40), "empty.png", "B", 5))
-        self.buttons.append(ManageMenu.Button(self, (140, 20), (40, 40), "empty.png", "B", 7))
+        self.buttons.append(ManageMenu.Button(self, (5, 20), (40, 40), "brush_1_icon.png", "B", 1))
+        self.buttons.append(ManageMenu.Button(self, (50, 20), (40, 40), "brush_3_icon.png", "B", 3))
+        self.buttons.append(ManageMenu.Button(self, (95, 20), (40, 40), "brush_5_icon.png", "B", 5))
+        self.buttons.append(ManageMenu.Button(self, (140, 20), (40, 40), "brush_7_icon.png", "B", 7))
 
         self.buttons.append(ManageMenu.Button(self, (5, 70), (40, 40), "air_icon.png", "M", "air"))
         self.buttons.append(ManageMenu.Button(self, (50, 70), (40, 40), "sand_icon.png", "M", "sand"))
@@ -203,8 +203,8 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (5, 115), (40, 40), "fire_icon.png", "M", "fire"))
         self.buttons.append(ManageMenu.Button(self, (50, 115), (40, 40), "vapor_icon.png", "M", "vapor"))
 
-        self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "empty.png", "C", "clear"))
-        self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "empty.png", "C", "pause"))
+        self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
+        self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
 
     def set_button_width(self, width):
         self.button_width = width
