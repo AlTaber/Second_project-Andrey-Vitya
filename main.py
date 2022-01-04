@@ -117,6 +117,14 @@ class Board:
         element = self.board[coords[0]][coords[1]]
         if element.type == "water":
             self.replace(coords, "vapor")
+        elif element.type == "acid":
+            self.replace(coords, "acid_vapor")
+
+    def acid(self, coords):
+        if self.board[coords[0]][coords[1]].soluble:
+            self.replace(coords, "air")
+            return True
+        return False
 
     def tick_board(self):
         if self.pause:
@@ -132,22 +140,32 @@ class Board:
                 if element.type == "vapor":
                     if random.randint(0, 50) == 0:
                         self.replace((j, i), "water")
-                if element.type == "fire":
+                elif element.type == "acid_vapor":
+                    if random.randint(0, 35) == 0:
+                        self.replace((j, i), "acid")
+                elif element.type == "fire":
                     if element.temperature <= 1:
                         self.replace((j, i), "air")
                     else:
                         self.board[j][i].fade()
                     for coords in self.get_neighbors_coords((j, i)):
                         self.fire(coords)
+                elif element.type == "acid":
+                    for coords in self.get_neighbors_coords((j, i)):
+                        if random.randint(0, 35) == 0:
+                            if self.acid(coords):
+                                self.replace((j, i), "air")
                 # физика элемента
                 if element.cls == "falling":
                     if j != self.height - 1:
                         if element.weight > temp[j + 1][i].weight:
                             to_switch.append(((j, i), (j + 1, i)))
                 elif element.cls in ["liquid", "gas"]:
+                    flag = True
                     if j != self.height - 1:
                         if element.weight > temp[j + 1][i].weight:
                             to_switch.append(((j, i), (j + 1, i)))
+                            flag = False
                         else:
                             d_step_r_l = []
                             if i != 0:
@@ -158,23 +176,26 @@ class Board:
                                     d_step_r_l.append(1)
                             if d_step_r_l:
                                 to_switch.append(((j, i), (j + 1, i + random.choice(d_step_r_l))))
-                            else:
-                                step_r_l = []
-                                if i != 0:
-                                    if temp[j][i - 1].weight < element.weight:
-                                        step_r_l.append(-1)
-                                if i != self.width - 1:
-                                    if temp[j][i + 1].weight < element.weight:
-                                        step_r_l.append(1)
-                                if step_r_l:
-                                    to_switch.append(((j, i), (j, i + random.choice(step_r_l))))
+                                flag = False
+                    if flag:
+                        step_r_l = []
+                        if i != 0:
+                            if temp[j][i - 1].weight < element.weight:
+                                step_r_l.append(-1)
+                        if i != self.width - 1:
+                            if temp[j][i + 1].weight < element.weight:
+                                step_r_l.append(1)
+                        if step_r_l:
+                            to_switch.append(((j, i), (j, i + random.choice(step_r_l))))
+
         for co in to_switch:
             self.switch(co[0], co[1])
 
     def generate_material(self, m_type):
         return {"air": Sandbox.GameObjects.Air(), "sand": Sandbox.GameObjects.Sand(),
                 "water": Sandbox.GameObjects.Water(), "iron": Sandbox.GameObjects.Iron(),
-                "vapor": Sandbox.GameObjects.Vapor(), "fire": Sandbox.GameObjects.Fire()}[m_type]
+                "vapor": Sandbox.GameObjects.Vapor(), "fire": Sandbox.GameObjects.Fire(),
+                "acid": Sandbox.GameObjects.Acid(), "acid_vapor": Sandbox.GameObjects.AVapor()}[m_type]
 
 
 class ManageMenu:
@@ -202,6 +223,8 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (140, 70), (40, 40), "iron_icon.png", "M", "iron"))
         self.buttons.append(ManageMenu.Button(self, (5, 115), (40, 40), "fire_icon.png", "M", "fire"))
         self.buttons.append(ManageMenu.Button(self, (50, 115), (40, 40), "vapor_icon.png", "M", "vapor"))
+        self.buttons.append(ManageMenu.Button(self, (95, 115), (40, 40), "acid_icon.png", "M", "acid"))
+        self.buttons.append(ManageMenu.Button(self, (140, 115), (40, 40), "acid_vapor_icon.png", "M", "acid_vapor"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
@@ -303,7 +326,7 @@ class ManageMenu:
 
 class Sandbox:
     def __init__(self):
-        self.board = Board(50, 43)
+        self.board = Board(50, 42)
         pygame.init()
         self.size = self.width, self.height = 1000, 692
         self.screen = pygame.display.set_mode(self.size)
@@ -421,6 +444,7 @@ class Sandbox:
                 self.color = approximate_color(173, 173, 173, 2)
                 self.weight = 20
                 self.durability = 7
+                self.soluble = True
 
         class Vapor(Gas):
             def __init__(self):
@@ -436,10 +460,28 @@ class Sandbox:
                 self.color = [222, 89, 22]
                 self.weight = -100
                 self.temperature = 5
+                self.soluble = False
 
             def fade(self):
                 self.temperature -= 1
                 self.color = {4: [194, 56, 6], 3: [161, 41, 8], 2: [135, 31, 12], 1: [102, 9, 9]}[self.temperature]
+
+        class Acid(Liquid):
+            def __init__(self):
+                super().__init__()
+                self.type = "acid"
+                self.color = approximate_color(130, 227, 27, 10)
+                self.weight = 8
+                self.durability = 10
+
+        class AVapor(Gas):
+            def __init__(self):
+                super().__init__()
+                self.type = "acid_vapor"
+                self.color = approximate_color(145, 235, 154, 3)
+                self.weight = -11
+                self.durability = 10
+
 
 
 sandbox = Sandbox()
