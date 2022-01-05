@@ -195,7 +195,8 @@ class Board:
         return {"air": Sandbox.GameObjects.Air(), "sand": Sandbox.GameObjects.Sand(),
                 "water": Sandbox.GameObjects.Water(), "iron": Sandbox.GameObjects.Iron(),
                 "vapor": Sandbox.GameObjects.Vapor(), "fire": Sandbox.GameObjects.Fire(),
-                "acid": Sandbox.GameObjects.Acid(), "acid_vapor": Sandbox.GameObjects.AVapor()}[m_type]
+                "acid": Sandbox.GameObjects.Acid(), "acid_vapor": Sandbox.GameObjects.AVapor(),
+                "dirt": Sandbox.GameObjects.Dirt()}[m_type]
 
 
 class ManageMenu:
@@ -225,6 +226,7 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (50, 115), (40, 40), "vapor_icon.png", "M", "vapor"))
         self.buttons.append(ManageMenu.Button(self, (95, 115), (40, 40), "acid_icon.png", "M", "acid"))
         self.buttons.append(ManageMenu.Button(self, (140, 115), (40, 40), "acid_vapor_icon.png", "M", "acid_vapor"))
+        self.buttons.append(ManageMenu.Button(self, (5, 160), (40, 40), "empty.png", "M", "dirt"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
@@ -471,7 +473,7 @@ class Sandbox:
                 super().__init__()
                 self.type = "acid"
                 self.color = approximate_color(130, 227, 27, 10)
-                self.weight = 8
+                self.weight = 7
                 self.durability = 10
 
         class AVapor(Gas):
@@ -482,6 +484,14 @@ class Sandbox:
                 self.weight = -11
                 self.durability = 10
 
+        class Dirt(Falling):
+            def __init__(self):
+                super().__init__()
+                self.type = "dirt"
+                self.color = approximate_color(82, 35, 24, 5)
+                self.weight = 10
+                self.durability = 1
+                self.soluble = True
 
 
 sandbox = Sandbox()
