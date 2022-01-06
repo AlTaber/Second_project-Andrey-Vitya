@@ -583,7 +583,7 @@ class Sandbox:
                 super().__init__()
                 self.type = "coal"
                 self.color = approximate_color(54, 69, 79, 2)
-                self.weight = -10
+                self.weight = 10
                 self.durability = 4
                 self.extinct_chance = 200
 
