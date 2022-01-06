@@ -129,13 +129,12 @@ class Board:
     def tick_board(self):
         if self.pause:
             return
-        temp = copy.deepcopy(self.board)
         random_i = list(range(self.width))
         random.shuffle(random_i)
         to_switch = []
         for i in random_i:
             for j in range(self.height):
-                element = temp[j][i]
+                element = self.board[j][i]
                 # свойства элемента
                 if element.type == "vapor":
                     if random.randint(0, 50) == 0:
@@ -158,21 +157,21 @@ class Board:
                 # физика элемента
                 if element.cls == "falling":
                     if j != self.height - 1:
-                        if element.weight > temp[j + 1][i].weight:
+                        if element.weight > self.board[j + 1][i].weight:
                             to_switch.append(((j, i), (j + 1, i)))
                 elif element.cls in ["liquid", "gas"]:
                     flag = True
                     if j != self.height - 1:
-                        if element.weight > temp[j + 1][i].weight:
+                        if element.weight > self.board[j + 1][i].weight:
                             to_switch.append(((j, i), (j + 1, i)))
                             flag = False
                         else:
                             d_step_r_l = []
                             if i != 0:
-                                if element.weight > temp[j + 1][i - 1].weight:
+                                if element.weight > self.board[j + 1][i - 1].weight:
                                     d_step_r_l.append(-1)
                             if i != self.width - 1:
-                                if element.weight > temp[j + 1][i + 1].weight:
+                                if element.weight > self.board[j + 1][i + 1].weight:
                                     d_step_r_l.append(1)
                             if d_step_r_l:
                                 to_switch.append(((j, i), (j + 1, i + random.choice(d_step_r_l))))
@@ -180,10 +179,10 @@ class Board:
                     if flag:
                         step_r_l = []
                         if i != 0:
-                            if temp[j][i - 1].weight < element.weight:
+                            if self.board[j][i - 1].weight < element.weight:
                                 step_r_l.append(-1)
                         if i != self.width - 1:
-                            if temp[j][i + 1].weight < element.weight:
+                            if self.board[j][i + 1].weight < element.weight:
                                 step_r_l.append(1)
                         if step_r_l:
                             to_switch.append(((j, i), (j, i + random.choice(step_r_l))))
