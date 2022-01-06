@@ -576,19 +576,19 @@ class Sandbox:
                 self.extinct_chance = 110
 
             def random_burning_color(self):
-                self.color = approximate_color(163, 90, 0, 10)
+                self.color = approximate_color(247, 135, 7, 10)
 
         class Coal(IgnitableS):
             def __init__(self):
                 super().__init__()
                 self.type = "coal"
-                self.color = approximate_color(54, 69, 79, 2)
+                self.color = approximate_color(15, 14, 23, 2)
                 self.weight = 10
                 self.durability = 4
                 self.extinct_chance = 200
 
             def random_burning_color(self):
-                self.color = approximate_color(89, 0, 0, 10)
+                self.color = approximate_color(247, 99, 7, 10)
 
 
 sandbox = Sandbox()
