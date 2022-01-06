@@ -1,5 +1,4 @@
 import pygame
-import copy
 import random
 import os
 import sys
@@ -119,6 +118,12 @@ class Board:
             self.replace(coords, "vapor")
         elif element.type == "acid":
             self.replace(coords, "acid_vapor")
+        elif element.cls == "ignitable_liquid":
+            self.board[coords[0]][coords[1]].burn()
+
+    def set_fire_on_burning(self, coords):
+        if self.board[coords[0]][coords[1]].type == "air" and random.randint(0, 20) == 0:
+            self.replace(coords, "fire_4")
 
     def acid(self, coords):
         if self.board[coords[0]][coords[1]].soluble:
@@ -132,6 +137,8 @@ class Board:
         random_i = list(range(self.width))
         random.shuffle(random_i)
         to_switch = []
+        to_fire = []
+        to_fire_on_burning = []
         for i in random_i:
             for j in range(self.height):
                 element = self.board[j][i]
@@ -148,18 +155,25 @@ class Board:
                     else:
                         self.board[j][i].fade()
                     for coords in self.get_neighbors_coords((j, i)):
-                        self.fire(coords)
+                        to_fire.append(coords)
                 elif element.type == "acid":
                     for coords in self.get_neighbors_coords((j, i)):
                         if random.randint(0, 35) == 0:
                             if self.acid(coords):
                                 self.replace((j, i), "air")
+                elif element.cls == "ignitable_liquid":
+                    if element.burning:
+                        for coords in self.get_neighbors_coords((j, i)):
+                            to_fire.append(coords)
+                            to_fire_on_burning.append(coords)
+                        if random.randint(0, element.extinct_chance) == 0:
+                            self.replace((j, i), "air")
                 # физика элемента
                 if element.cls == "falling":
                     if j != self.height - 1:
                         if element.weight > self.board[j + 1][i].weight:
                             to_switch.append(((j, i), (j + 1, i)))
-                elif element.cls in ["liquid", "gas"]:
+                elif element.cls in ["liquid", "gas", "ignitable_liquid"]:
                     flag = True
                     if j != self.height - 1:
                         if element.weight > self.board[j + 1][i].weight:
@@ -190,12 +204,19 @@ class Board:
         for co in to_switch:
             self.switch(co[0], co[1])
 
+        for co in to_fire:
+            self.fire(co)
+
+        for co in to_fire_on_burning:
+            self.set_fire_on_burning(co)
+
     def generate_material(self, m_type):
         return {"air": Sandbox.GameObjects.Air(), "sand": Sandbox.GameObjects.Sand(),
                 "water": Sandbox.GameObjects.Water(), "iron": Sandbox.GameObjects.Iron(),
-                "vapor": Sandbox.GameObjects.Vapor(), "fire": Sandbox.GameObjects.Fire(),
+                "vapor": Sandbox.GameObjects.Vapor(), "fire_4": Sandbox.GameObjects.Fire(4),
                 "acid": Sandbox.GameObjects.Acid(), "acid_vapor": Sandbox.GameObjects.AVapor(),
-                "dirt": Sandbox.GameObjects.Dirt()}[m_type]
+                "dirt": Sandbox.GameObjects.Dirt(), "oil": Sandbox.GameObjects.Oil(),
+                "fire_5": Sandbox.GameObjects.Fire(5)}[m_type]
 
 
 class ManageMenu:
@@ -221,11 +242,12 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (50, 70), (40, 40), "sand_icon.png", "M", "sand"))
         self.buttons.append(ManageMenu.Button(self, (95, 70), (40, 40), "water_icon.png", "M", "water"))
         self.buttons.append(ManageMenu.Button(self, (140, 70), (40, 40), "iron_icon.png", "M", "iron"))
-        self.buttons.append(ManageMenu.Button(self, (5, 115), (40, 40), "fire_icon.png", "M", "fire"))
+        self.buttons.append(ManageMenu.Button(self, (5, 115), (40, 40), "fire_icon.png", "M", "fire_5"))
         self.buttons.append(ManageMenu.Button(self, (50, 115), (40, 40), "vapor_icon.png", "M", "vapor"))
         self.buttons.append(ManageMenu.Button(self, (95, 115), (40, 40), "acid_icon.png", "M", "acid"))
         self.buttons.append(ManageMenu.Button(self, (140, 115), (40, 40), "acid_vapor_icon.png", "M", "acid_vapor"))
-        self.buttons.append(ManageMenu.Button(self, (5, 160), (40, 40), "empty.png", "M", "dirt"))
+        self.buttons.append(ManageMenu.Button(self, (5, 160), (40, 40), "dirt_icon.png", "M", "dirt"))
+        self.buttons.append(ManageMenu.Button(self, (50, 160), (40, 40), "oil_icon.png", "M", "oil"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
@@ -413,6 +435,18 @@ class Sandbox:
                 super().__init__()
                 self.cls = "special"
 
+        class IgnitableL(Liquid):
+            def __init__(self):
+                super().__init__()
+                self.cls = "ignitable_liquid"
+                self.durability = 1
+                self.soluble = False
+                self.burning = False
+                self.extinct_chance = 0
+
+            def burn(self):
+                self.burning = True
+
         # Основные вещества
         class Air(Gas):
             def __init__(self):
@@ -455,12 +489,12 @@ class Sandbox:
                 self.weight = -11
 
         class Fire(Special):
-            def __init__(self):
+            def __init__(self, temperature):
                 super().__init__()
                 self.type = "fire"
                 self.color = [222, 89, 22]
                 self.weight = -100
-                self.temperature = 5
+                self.temperature = temperature
                 self.soluble = False
 
             def fade(self):
@@ -487,11 +521,23 @@ class Sandbox:
             def __init__(self):
                 super().__init__()
                 self.type = "dirt"
-                self.color = approximate_color(82, 35, 24, 5)
+                self.color = approximate_color(105, 39, 10, 5)
                 self.weight = 10
                 self.durability = 1
                 self.soluble = True
 
+        class Oil(IgnitableL):
+            def __init__(self):
+                super().__init__()
+                self.type = "oil"
+                self.color = approximate_color(25, 22, 31, 1)
+                self.weight = 6
+                self.durability = 4
+                self.extinct_chance = 20
+
+            def burn(self):
+                super().burn()
+                self.color = [252, 228, 167]
 
 sandbox = Sandbox()
 sandbox.run_game()
