@@ -558,7 +558,7 @@ class Sandbox:
                 super().__init__()
                 self.type = "oil"
                 self.color = approximate_color(25, 22, 31, 1)
-                self.weight = 20
+                self.weight = 6
                 self.durability = 4
                 self.extinct_chance = 20
 
