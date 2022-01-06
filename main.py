@@ -64,7 +64,7 @@ class Board:
 
     def get_cell(self, mouse_pos):
         if not self.left <= mouse_pos[0] <= self.left + self.width * self.cell_size - 1 or \
-           not self.top <= mouse_pos[1] <= self.top + self.height * self.cell_size - 1:
+                not self.top <= mouse_pos[1] <= self.top + self.height * self.cell_size - 1:
             return None
         x, y = mouse_pos[0] - self.left, mouse_pos[1] - self.top
         return x // self.cell_size, y // self.cell_size
@@ -118,8 +118,9 @@ class Board:
             self.replace(coords, "vapor")
         elif element.type == "acid":
             self.replace(coords, "acid_vapor")
-        elif element.cls == "ignitable_liquid":
-            self.board[coords[0]][coords[1]].burn()
+        elif element.cls in ["ignitable_solid", "ignitable_liquid"]:
+            if 'air' in [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]:
+                self.board[coords[0]][coords[1]].burn()
 
     def set_fire_on_burning(self, coords):
         if self.board[coords[0]][coords[1]].type == "air" and random.randint(0, 20) == 0:
@@ -163,6 +164,14 @@ class Board:
                                 self.replace((j, i), "air")
                 elif element.cls == "ignitable_liquid":
                     if element.burning:
+                        for coords in self.get_neighbors_coords((j, i)):
+                            to_fire.append(coords)
+                            to_fire_on_burning.append(coords)
+                        if random.randint(0, element.extinct_chance) == 0:
+                            self.replace((j, i), "air")
+                elif element.cls == "ignitable_solid":
+                    if element.burning:
+                        self.board[j][i].random_burning_color()
                         for coords in self.get_neighbors_coords((j, i)):
                             to_fire.append(coords)
                             to_fire_on_burning.append(coords)
@@ -216,6 +225,7 @@ class Board:
                 "vapor": Sandbox.GameObjects.Vapor(), "fire_4": Sandbox.GameObjects.Fire(4),
                 "acid": Sandbox.GameObjects.Acid(), "acid_vapor": Sandbox.GameObjects.AVapor(),
                 "dirt": Sandbox.GameObjects.Dirt(), "oil": Sandbox.GameObjects.Oil(),
+                "wood": Sandbox.GameObjects.Wood(), "coal": Sandbox.GameObjects.Coal(),
                 "fire_5": Sandbox.GameObjects.Fire(5)}[m_type]
 
 
@@ -248,6 +258,8 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (140, 115), (40, 40), "acid_vapor_icon.png", "M", "acid_vapor"))
         self.buttons.append(ManageMenu.Button(self, (5, 160), (40, 40), "dirt_icon.png", "M", "dirt"))
         self.buttons.append(ManageMenu.Button(self, (50, 160), (40, 40), "oil_icon.png", "M", "oil"))
+        self.buttons.append(ManageMenu.Button(self, (95, 160), (40, 40), "empty.png", "M", "wood"))
+        self.buttons.append(ManageMenu.Button(self, (140, 160), (40, 40), "empty.png", "M", "coal"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
@@ -326,7 +338,7 @@ class ManageMenu:
     def get_button(self, mouse_pos):
         for button in self.buttons:
             if button.coords[0] + self.left <= mouse_pos[0] <= button.coords[0] + button.size[0] + self.left and \
-               button.coords[1] + self.top <= mouse_pos[1] <= button.coords[1] + button.size[1] + self.top:
+                    button.coords[1] + self.top <= mouse_pos[1] <= button.coords[1] + button.size[1] + self.top:
                 return button
         return None
 
@@ -447,6 +459,21 @@ class Sandbox:
             def burn(self):
                 self.burning = True
 
+        class IgnitableS(Solid):
+            def __init__(self):
+                super().__init__()
+                self.cls = "ignitable_solid"
+                self.durability = 1
+                self.soluble = True
+                self.burning = False
+                self.extinct_chance = 0
+
+            def burn(self):
+                self.burning = True
+
+            def random_burning_color(self):
+                self.color = approximate_color(217, 119, 0, 2)
+
         # Основные вещества
         class Air(Gas):
             def __init__(self):
@@ -531,13 +558,38 @@ class Sandbox:
                 super().__init__()
                 self.type = "oil"
                 self.color = approximate_color(25, 22, 31, 1)
-                self.weight = 6
+                self.weight = 20
                 self.durability = 4
                 self.extinct_chance = 20
 
             def burn(self):
                 super().burn()
                 self.color = [252, 228, 167]
+
+        class Wood(IgnitableS):
+            def __init__(self):
+                super().__init__()
+                self.type = "wood"
+                self.color = approximate_color(101, 67, 33, 2)
+                self.weight = 10
+                self.durability = 4
+                self.extinct_chance = 110
+
+            def random_burning_color(self):
+                self.color = approximate_color(163, 90, 0, 10)
+
+        class Coal(IgnitableS):
+            def __init__(self):
+                super().__init__()
+                self.type = "coal"
+                self.color = approximate_color(54, 69, 79, 2)
+                self.weight = -10
+                self.durability = 4
+                self.extinct_chance = 200
+
+            def random_burning_color(self):
+                self.color = approximate_color(89, 0, 0, 10)
+
 
 sandbox = Sandbox()
 sandbox.run_game()
