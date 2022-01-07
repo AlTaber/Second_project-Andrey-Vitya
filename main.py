@@ -2,6 +2,11 @@ import pygame
 import random
 import os
 import sys
+import ctypes
+
+
+myappid = 'mycompany.myproduct.subproduct.version'
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 
 def load_image(name, colorkey=None):
@@ -420,6 +425,8 @@ class Sandbox:
         self.menu.set_button_width(3)
 
     def run_game(self):
+        pygame.display.set_icon(load_image("water_icon.png"))
+        pygame.display.set_caption("Sandox by: AlTaberOwO#2920 , AndrDD#2528")
         screen = self.screen
         clock = pygame.time.Clock()
         max_fps = 30
