@@ -112,6 +112,9 @@ class Board:
                 result.append((cell[0] + coords[0], cell[1] + coords[1]))
         return result
 
+    def get_air_neighbors_coords(self, cell):
+        return list(filter(lambda x: self.board[x[0]][x[1]].type == "air", self.get_neighbors_coords(cell)))
+
     def fire(self, coords):
         element = self.board[coords[0]][coords[1]]
         if element.type == "water":
@@ -120,14 +123,23 @@ class Board:
             self.replace(coords, "acid_vapor")
         elif element.cls in ["ignitable_solid", "ignitable_liquid"]:
             neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
-            if 'air' in neighbors and "water" not in neighbors and "vapor" not in neighbors:
+            if 'air' in neighbors and "water" not in neighbors and "vapor" not in neighbors and\
+                    "salt_water" not in neighbors:
                 self.board[coords[0]][coords[1]].burn()
+        elif element.type == "salt_water":
+            air_neighbors = self.get_air_neighbors_coords(coords)
+            if air_neighbors and random.randint(0, 3) == 0:
+                self.replace(random.choice(air_neighbors), "vapor")
+                self.replace(coords, "salt")
+            else:
+                self.replace(coords, "vapor")
 
     def fade(self, coords):
         if self.board[coords[0]][coords[1]].cls in ["ignitable_solid"] and \
            self.board[coords[0]][coords[1]].burning:
             neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
-            if ("air" not in neighbors and "fire" not in neighbors) or "water" in neighbors or "vapor" in neighbors:
+            if ("air" not in neighbors and "fire" not in neighbors) or "salt_water" in neighbors or \
+                    "water" in neighbors or "vapor" in neighbors:
                 self.board[coords[0]][coords[1]].fade()
 
     def set_fire_on_burning(self, coords):
@@ -140,6 +152,10 @@ class Board:
             return True
         return False
 
+    def salt(self, coords):
+        if self.board[coords[0]][coords[1]].type == "water":
+            self.replace(coords, "salt_water")
+
     def tick_board(self):
         if self.pause:
             return
@@ -149,6 +165,7 @@ class Board:
         to_fire = []
         to_fire_on_burning = []
         to_fade = []
+        to_salt = []
         for i in random_i:
             for j in range(self.height):
                 element = self.board[j][i]
@@ -186,6 +203,13 @@ class Board:
                             to_fire.append(coords)
                             to_fire_on_burning.append(coords)
                         if random.randint(0, element.extinct_chance) == 0:
+                            self.replace((j, i), "air")
+                elif element.type == "salt":
+                    neighbors = self.get_neighbors_coords((j, i))
+                    if "water" in [self.board[x[0]][x[1]].type for x in neighbors]:
+                        for coords in neighbors:
+                            to_salt.append(coords)
+                        if random.randint(0, 2) == 0:
                             self.replace((j, i), "air")
                 # физика элемента
                 if element.cls == "falling":
@@ -232,6 +256,9 @@ class Board:
         for co in to_fade:
             self.fade(co)
 
+        for co in to_salt:
+            self.salt(co)
+
     def generate_material(self, m_type):
         return {"air": Sandbox.GameObjects.Air(), "sand": Sandbox.GameObjects.Sand(),
                 "water": Sandbox.GameObjects.Water(), "iron": Sandbox.GameObjects.Iron(),
@@ -239,12 +266,14 @@ class Board:
                 "acid": Sandbox.GameObjects.Acid(), "acid_vapor": Sandbox.GameObjects.AVapor(),
                 "dirt": Sandbox.GameObjects.Dirt(), "oil": Sandbox.GameObjects.Oil(),
                 "wood": Sandbox.GameObjects.Wood(), "coal": Sandbox.GameObjects.Coal(),
-                "fire_5": Sandbox.GameObjects.Fire(5)}[m_type]
+                "fire_5": Sandbox.GameObjects.Fire(5), "salt": Sandbox.GameObjects.Salt(),
+                "salt_water": Sandbox.GameObjects.SWater()}[m_type]
 
 
 class ManageMenu:
-    def __init__(self, board: Board):
+    def __init__(self, board: Board, parent):
         self.link_with_board = board
+        self.parent = parent
         self.left = board.left * 2 + board.cell_size * board.width
         self.top = board.top
         self.all_sprites = pygame.sprite.Group()
@@ -271,8 +300,10 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (140, 115), (40, 40), "acid_vapor_icon.png", "M", "acid_vapor"))
         self.buttons.append(ManageMenu.Button(self, (5, 160), (40, 40), "dirt_icon.png", "M", "dirt"))
         self.buttons.append(ManageMenu.Button(self, (50, 160), (40, 40), "oil_icon.png", "M", "oil"))
-        self.buttons.append(ManageMenu.Button(self, (95, 160), (40, 40), "empty.png", "M", "wood"))
-        self.buttons.append(ManageMenu.Button(self, (140, 160), (40, 40), "empty.png", "M", "coal"))
+        self.buttons.append(ManageMenu.Button(self, (95, 160), (40, 40), "wood_icon.png", "M", "wood"))
+        self.buttons.append(ManageMenu.Button(self, (140, 160), (40, 40), "coal_icon.png", "M", "coal"))
+        self.buttons.append(ManageMenu.Button(self, (5, 205), (40, 40), "salt_icon.png", "M", "salt"))
+        self.buttons.append(ManageMenu.Button(self, (50, 205), (40, 40), "salt_water_icon.png", "M", "salt_water"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
@@ -316,14 +347,15 @@ class ManageMenu:
 
     def render(self, surf):
         for button in self.buttons:
-            button_color_1 = (89, 89, 89)
-            button_color_2 = (220, 220, 220)
+            rnbwc = self.parent.rainbow_color
+            button_color_1 = rnbwc[0] + 20, rnbwc[1] + 20, rnbwc[2] + 20
+            button_color_2 = rnbwc[0] + 70, rnbwc[1] + 70, rnbwc[2] + 70
             if button.selected:
-                button_color_1 = (16, 73, 169)
-                button_color_2 = (18, 114, 204)
-            elif button.mouse_on:
                 button_color_1 = (150, 150, 150)
-                button_color_2 = (255, 255, 255)
+                button_color_2 = (220, 220, 220)
+            elif button.mouse_on:
+                button_color_1 = rnbwc[0] + 40, rnbwc[1] + 40, rnbwc[2] + 40
+                button_color_2 = rnbwc[0] + 100, rnbwc[1] + 100, rnbwc[2] + 100
             pygame.draw.rect(surf, color=button_color_1, rect=(
                 self.left + button.coords[0],
                 self.top + button.coords[1],
@@ -377,9 +409,10 @@ class Sandbox:
         self.board = Board(50, 42)
         pygame.init()
         self.size = self.width, self.height = 1000, 692
-        self.screen = pygame.display.set_mode(self.size)
+        self.screen = pygame.display.set_mode(self.size, pygame.DOUBLEBUF)
         self.board.set_view(2, 2, 16)
-        self.menu = ManageMenu(self.board)
+        self.rainbow_color = pygame.Color(0)
+        self.menu = ManageMenu(self.board, self)
         self.menu.set_button_width(3)
 
     def run_game(self):
@@ -393,8 +426,10 @@ class Sandbox:
         fps_font = pygame.font.Font(None, 32)
         fps_pos = (self.board.left * 2 + self.board.width * self.board.cell_size, 1)
 
+        hue = 0
+
         while running:
-            screen.fill((33, 10, 61))
+            screen.fill(self.rainbow_color)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -413,7 +448,11 @@ class Sandbox:
             self.board.tick_board()
             clock.tick(max_fps)
             fps_now = str(clock.get_fps())[:4]
-            text = fps_font.render(fps_now + " FPS", True, (80, 255, 255))
+            text = fps_font.render(fps_now + " FPS", True, (220, 220, 220))
+
+            self.rainbow_color.hsla = (hue, 50, 25, 50)
+            hue = hue + 1 if hue < 360 else 0
+
             screen.blit(text, fps_pos)
             pygame.display.flip()
         pygame.quit()
@@ -620,6 +659,23 @@ class Sandbox:
 
             def random_burning_color(self):
                 self.color = approximate_color(247, 99, 7, 10)
+
+        class Salt(Falling):
+            def __init__(self):
+                super().__init__()
+                self.type = "salt"
+                self.color = approximate_color(237, 237, 237, 15)
+                self.weight = 10
+                self.durability = 1
+                self.soluble = True
+
+        class SWater(Liquid):
+            def __init__(self):
+                super().__init__()
+                self.type = "salt_water"
+                self.color = approximate_color(84, 92, 176, 10)
+                self.weight = 8
+                self.durability = 10
 
 
 sandbox = Sandbox()
