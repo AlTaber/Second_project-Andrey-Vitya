@@ -119,8 +119,16 @@ class Board:
         elif element.type == "acid":
             self.replace(coords, "acid_vapor")
         elif element.cls in ["ignitable_solid", "ignitable_liquid"]:
-            if 'air' in [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]:
+            neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
+            if 'air' in neighbors and "water" not in neighbors and "vapor" not in neighbors:
                 self.board[coords[0]][coords[1]].burn()
+
+    def fade(self, coords):
+        if self.board[coords[0]][coords[1]].cls in ["ignitable_solid"] and \
+           self.board[coords[0]][coords[1]].burning:
+            neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
+            if ("air" not in neighbors and "fire" not in neighbors) or "water" in neighbors or "vapor" in neighbors:
+                self.board[coords[0]][coords[1]].fade()
 
     def set_fire_on_burning(self, coords):
         if self.board[coords[0]][coords[1]].type == "air" and random.randint(0, 20) == 0:
@@ -140,6 +148,7 @@ class Board:
         to_switch = []
         to_fire = []
         to_fire_on_burning = []
+        to_fade = []
         for i in random_i:
             for j in range(self.height):
                 element = self.board[j][i]
@@ -157,7 +166,7 @@ class Board:
                         self.board[j][i].fade()
                     for coords in self.get_neighbors_coords((j, i)):
                         to_fire.append(coords)
-                elif element.type == "acid":
+                elif element.type in ["acid", "acid_vapor"]:
                     for coords in self.get_neighbors_coords((j, i)):
                         if random.randint(0, 35) == 0:
                             if self.acid(coords):
@@ -171,6 +180,7 @@ class Board:
                             self.replace((j, i), "air")
                 elif element.cls == "ignitable_solid":
                     if element.burning:
+                        to_fade.append((j, i))
                         self.board[j][i].random_burning_color()
                         for coords in self.get_neighbors_coords((j, i)):
                             to_fire.append(coords)
@@ -218,6 +228,9 @@ class Board:
 
         for co in to_fire_on_burning:
             self.set_fire_on_burning(co)
+
+        for co in to_fade:
+            self.fade(co)
 
     def generate_material(self, m_type):
         return {"air": Sandbox.GameObjects.Air(), "sand": Sandbox.GameObjects.Sand(),
@@ -459,6 +472,9 @@ class Sandbox:
             def burn(self):
                 self.burning = True
 
+            def fade(self):
+                self.burning = False
+
         class IgnitableS(Solid):
             def __init__(self):
                 super().__init__()
@@ -470,6 +486,9 @@ class Sandbox:
 
             def burn(self):
                 self.burning = True
+
+            def fade(self):
+                self.burning = False
 
             def random_burning_color(self):
                 self.color = approximate_color(217, 119, 0, 2)
@@ -566,26 +585,38 @@ class Sandbox:
                 super().burn()
                 self.color = [252, 228, 167]
 
+            def fade(self):
+                super().fade()
+                self.color = approximate_color(25, 22, 31, 2)
+
         class Wood(IgnitableS):
             def __init__(self):
                 super().__init__()
                 self.type = "wood"
                 self.color = approximate_color(101, 67, 33, 2)
-                self.weight = 10
+                self.weight = 20
                 self.durability = 4
                 self.extinct_chance = 110
 
             def random_burning_color(self):
                 self.color = approximate_color(247, 135, 7, 10)
 
+            def fade(self):
+                super().fade()
+                self.color = approximate_color(101, 67, 33, 2)
+
         class Coal(IgnitableS):
             def __init__(self):
                 super().__init__()
                 self.type = "coal"
                 self.color = approximate_color(15, 14, 23, 2)
-                self.weight = 10
+                self.weight = 20
                 self.durability = 4
                 self.extinct_chance = 200
+
+            def fade(self):
+                super().fade()
+                self.color = approximate_color(15, 14, 23, 2)
 
             def random_burning_color(self):
                 self.color = approximate_color(247, 99, 7, 10)
