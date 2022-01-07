@@ -307,6 +307,7 @@ class ManageMenu:
 
         self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
+        self.buttons.append(ManageMenu.Button(self, (95, 620), (40, 40), "rainbow_icon.png", "C", "rainbow_change"))
 
     def set_button_width(self, width):
         self.button_width = width
@@ -379,6 +380,8 @@ class ManageMenu:
             self.link_with_board.clear()
         elif action_id == "pause":
             self.link_with_board.set_pause(not self.link_with_board.pause)
+        elif action_id == "rainbow_change":
+            self.parent.rainbow_change()
 
     def get_button(self, mouse_pos):
         for button in self.buttons:
@@ -412,6 +415,7 @@ class Sandbox:
         self.screen = pygame.display.set_mode(self.size, pygame.DOUBLEBUF)
         self.board.set_view(2, 2, 16)
         self.rainbow_color = pygame.Color(0)
+        self.rainbow_turn = True
         self.menu = ManageMenu(self.board, self)
         self.menu.set_button_width(3)
 
@@ -450,12 +454,20 @@ class Sandbox:
             fps_now = str(clock.get_fps())[:4]
             text = fps_font.render(fps_now + " FPS", True, (220, 220, 220))
 
-            self.rainbow_color.hsla = (hue, 50, 25, 50)
-            hue = hue + 1 if hue < 360 else 0
+            if self.rainbow_turn:
+                self.rainbow_color.hsla = (hue, 50, 25, 50)
+                hue = hue + 1 if hue < 360 else 0
 
             screen.blit(text, fps_pos)
             pygame.display.flip()
         pygame.quit()
+
+    def rainbow_change(self):
+        self.rainbow_turn = not self.rainbow_turn
+        if self.rainbow_turn:
+            self.rainbow_color = pygame.Color(0)
+        else:
+            self.rainbow_color = (80, 80, 80)
 
     class GameObjects:
         class Object:
