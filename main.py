@@ -33,6 +33,11 @@ def approximate_color(r, g, b, max_color_modifier):
     b = 255 if b + color_modifier > 255 else (0 if b + color_modifier < 0 else b + color_modifier)
     return [r, g, b]
 
+def gradient_color(c1, c2, p):
+    p = 0 if p < 0 else (100 if p > 100 else p)
+    return ((c1[0] * p + c2[0] * (100 - p)) // 100, (c1[1] * p + c2[1] * (100 - p)) // 100,
+            (c1[2] * p + c2[2] * (100 - p)) // 100)
+
 
 class Board:
     def __init__(self, width, height):
@@ -101,6 +106,9 @@ class Board:
     def replace(self, cell, material_id):
         self.board[cell[0]][cell[1]] = self.generate_material(material_id)
 
+    def eq_replace(self, coords1, coords2):
+        self.board[coords2[0]][coords2[1]] = self.board[coords1[0]][coords1[1]]
+
     def clear(self):
         self.board = [[Sandbox.GameObjects.Air()] * self.width for _ in range(self.height)]
 
@@ -140,6 +148,8 @@ class Board:
                 self.replace(coords, "vapor")
         elif element.type in ["ice", "snow"]:
             self.replace(coords, "water")
+        elif element.type == "gunpowder":
+            self.explode(coords)
 
     def fade(self, coords):
         if self.board[coords[0]][coords[1]].cls in ["ignitable_solid"] and \
@@ -171,6 +181,17 @@ class Board:
             if random.randint(0, 30) == 0:
                 self.replace(coords, "snow")
 
+    def explode(self, coords):
+        if self.board[coords[0]][coords[1]].type == "gunpowder":
+            self.replace(coords, "explosion_wave_gp")
+
+    def explosion_wave(self, coords):
+        wave = self.board[coords[0]][coords[1]]
+        if wave.life_tick >= 1:
+            for co in self.get_neighbors_coords(coords):
+                element2 = self.board[co[0]][co[1]]
+                if element2.durability <= wave.power:
+                    self.board[co[0]][co[1]] = Sandbox.GameObjects.ExplosionWave(wave.power - 1, wave.range - 1)
 
     def tick_board(self):
         if self.pause:
@@ -183,6 +204,7 @@ class Board:
         to_fade = []
         to_salt = []
         to_ice = []
+        to_expwave = []
         for i in random_i:
             for j in range(self.height):
                 element = self.board[j][i]
@@ -233,6 +255,14 @@ class Board:
                     if "water" in [self.board[x[0]][x[1]].type for x in neighbors]:
                         for coords in neighbors:
                             to_ice.append(coords)
+                elif element.type == "explosion_wave":
+                    if element.life_tick <= 0 or element.range <= 0:
+                        self.replace((j, i), "air")
+                    else:
+                        self.board[j][i].fade()
+                        to_expwave.append((j, i))
+                        for coords in self.get_neighbors_coords((j, i)):
+                            to_fire.append(coords)
 
                 # физика элемента
                 if element.cls == "falling":
@@ -275,6 +305,9 @@ class Board:
         for co in to_fire:
             self.fire(co)
 
+        for co in to_expwave:
+            self.explosion_wave(co)
+
         for co in to_fire_on_burning:
             self.set_fire_on_burning(co)
 
@@ -296,7 +329,9 @@ class Board:
                 "wood": Sandbox.GameObjects.Wood(), "coal": Sandbox.GameObjects.Coal(),
                 "fire_5": Sandbox.GameObjects.Fire(5), "salt": Sandbox.GameObjects.Salt(),
                 "salt_water": Sandbox.GameObjects.SWater(), "ice": Sandbox.GameObjects.Ice(),
-                "snow": Sandbox.GameObjects.Snow()}[m_type]
+                "snow": Sandbox.GameObjects.Snow(), "gunpowder": Sandbox.GameObjects.Gunpowder(),
+                "explosion_wave_gp": Sandbox.GameObjects.ExplosionWave(4, 4),
+                "explosion_wave_5_5": Sandbox.GameObjects.ExplosionWave(5, 5)}[m_type]
 
 
 class ManageMenu:
@@ -323,18 +358,21 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (50, 70), (40, 40), "sand_icon.png", "M", "sand"))
         self.buttons.append(ManageMenu.Button(self, (95, 70), (40, 40), "water_icon.png", "M", "water"))
         self.buttons.append(ManageMenu.Button(self, (140, 70), (40, 40), "iron_icon.png", "M", "iron"))
-        self.buttons.append(ManageMenu.Button(self, (5, 115), (40, 40), "fire_icon.png", "M", "fire_5"))
-        self.buttons.append(ManageMenu.Button(self, (50, 115), (40, 40), "vapor_icon.png", "M", "vapor"))
-        self.buttons.append(ManageMenu.Button(self, (95, 115), (40, 40), "acid_icon.png", "M", "acid"))
-        self.buttons.append(ManageMenu.Button(self, (140, 115), (40, 40), "acid_vapor_icon.png", "M", "acid_vapor"))
-        self.buttons.append(ManageMenu.Button(self, (5, 160), (40, 40), "dirt_icon.png", "M", "dirt"))
-        self.buttons.append(ManageMenu.Button(self, (50, 160), (40, 40), "oil_icon.png", "M", "oil"))
-        self.buttons.append(ManageMenu.Button(self, (95, 160), (40, 40), "wood_icon.png", "M", "wood"))
-        self.buttons.append(ManageMenu.Button(self, (140, 160), (40, 40), "coal_icon.png", "M", "coal"))
-        self.buttons.append(ManageMenu.Button(self, (5, 205), (40, 40), "salt_icon.png", "M", "salt"))
-        self.buttons.append(ManageMenu.Button(self, (50, 205), (40, 40), "salt_water_icon.png", "M", "salt_water"))
-        self.buttons.append(ManageMenu.Button(self, (95, 205), (40, 40), "ice_icon.png", "M", "ice"))
-        self.buttons.append(ManageMenu.Button(self, (140, 205), (40, 40), "snow_icon.png", "M", "snow"))
+        self.buttons.append(ManageMenu.Button(self, (185, 70), (40, 40), "fire_icon.png", "M", "fire_5"))
+        self.buttons.append(ManageMenu.Button(self, (5, 115), (40, 40), "vapor_icon.png", "M", "vapor"))
+        self.buttons.append(ManageMenu.Button(self, (50, 115), (40, 40), "acid_icon.png", "M", "acid"))
+        self.buttons.append(ManageMenu.Button(self, (95, 115), (40, 40), "acid_vapor_icon.png", "M", "acid_vapor"))
+        self.buttons.append(ManageMenu.Button(self, (140, 115), (40, 40), "dirt_icon.png", "M", "dirt"))
+        self.buttons.append(ManageMenu.Button(self, (185, 115), (40, 40), "oil_icon.png", "M", "oil"))
+        self.buttons.append(ManageMenu.Button(self, (5, 160), (40, 40), "wood_icon.png", "M", "wood"))
+        self.buttons.append(ManageMenu.Button(self, (50, 160), (40, 40), "coal_icon.png", "M", "coal"))
+        self.buttons.append(ManageMenu.Button(self, (95, 160), (40, 40), "salt_icon.png", "M", "salt"))
+        self.buttons.append(ManageMenu.Button(self, (140, 160), (40, 40), "salt_water_icon.png", "M", "salt_water"))
+        self.buttons.append(ManageMenu.Button(self, (185, 160), (40, 40), "ice_icon.png", "M", "ice"))
+        self.buttons.append(ManageMenu.Button(self, (5, 205), (40, 40), "snow_icon.png", "M", "snow"))
+        self.buttons.append(ManageMenu.Button(self, (50, 205), (40, 40), "gunpowder_icon.png", "M", "gunpowder"))
+        self.buttons.append(ManageMenu.Button(self, (95, 205), (40, 40), "explosion_wave_icon.png",
+                                              "M", "explosion_wave_5_5"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
@@ -442,7 +480,7 @@ class Sandbox:
     def __init__(self):
         self.board = Board(50, 42)
         pygame.init()
-        self.size = self.width, self.height = 1000, 692
+        self.size = self.width, self.height = 1040, 692
         self.screen = pygame.display.set_mode(self.size, pygame.DOUBLEBUF)
         self.board.set_view(2, 2, 16)
         self.rainbow_color = pygame.Color(0)
@@ -584,6 +622,7 @@ class Sandbox:
                 self.type = "air"
                 self.color = [0, 0, 0]
                 self.weight = -10
+                self.durability = 0
 
         class Sand(Falling):
             def __init__(self):
@@ -600,7 +639,7 @@ class Sandbox:
                 self.type = "water"
                 self.color = approximate_color(30, 30, 200, 10)
                 self.weight = 7
-                self.durability = 10
+                self.durability = 3
 
         class Iron(Solid):
             def __init__(self):
@@ -608,7 +647,7 @@ class Sandbox:
                 self.type = "iron"
                 self.color = approximate_color(173, 173, 173, 2)
                 self.weight = 20
-                self.durability = 7
+                self.durability = 3
                 self.soluble = True
 
         class Vapor(Gas):
@@ -617,7 +656,7 @@ class Sandbox:
                 self.type = "vapor"
                 self.color = approximate_color(222, 222, 222, 3)
                 self.weight = -11
-                self.durability = 10
+                self.durability = 1
 
         class Fire(Special):
             def __init__(self, temperature):
@@ -627,7 +666,7 @@ class Sandbox:
                 self.weight = -100
                 self.temperature = temperature
                 self.soluble = False
-                self.durability = 0
+                self.durability = 1
 
             def fade(self):
                 self.temperature -= 1
@@ -639,7 +678,7 @@ class Sandbox:
                 self.type = "acid"
                 self.color = approximate_color(130, 227, 27, 10)
                 self.weight = 7
-                self.durability = 10
+                self.durability = 3
 
         class AVapor(Gas):
             def __init__(self):
@@ -647,7 +686,7 @@ class Sandbox:
                 self.type = "acid_vapor"
                 self.color = approximate_color(145, 235, 154, 3)
                 self.weight = -11
-                self.durability = 10
+                self.durability = 1
 
         class Dirt(Falling):
             def __init__(self):
@@ -664,7 +703,7 @@ class Sandbox:
                 self.type = "oil"
                 self.color = approximate_color(25, 22, 31, 1)
                 self.weight = 6
-                self.durability = 4
+                self.durability = 1
                 self.extinct_chance = 20
 
             def burn(self):
@@ -681,7 +720,7 @@ class Sandbox:
                 self.type = "wood"
                 self.color = approximate_color(101, 67, 33, 2)
                 self.weight = 20
-                self.durability = 5
+                self.durability = 2
                 self.extinct_chance = 110
 
             def random_burning_color(self):
@@ -697,7 +736,7 @@ class Sandbox:
                 self.type = "coal"
                 self.color = approximate_color(15, 14, 23, 2)
                 self.weight = 20
-                self.durability = 4
+                self.durability = 2
                 self.extinct_chance = 200
 
             def fade(self):
@@ -722,7 +761,7 @@ class Sandbox:
                 self.type = "salt_water"
                 self.color = approximate_color(84, 92, 176, 10)
                 self.weight = 8
-                self.durability = 10
+                self.durability = 3
 
         class Ice(Solid):
             def __init__(self):
@@ -741,6 +780,29 @@ class Sandbox:
                 self.weight = 6
                 self.durability = 2
                 self.soluble = False
+        class Gunpowder(Falling):
+            def __init__(self):
+                super().__init__()
+                self.type = "gunpowder"
+                self.color = approximate_color(36, 37, 38, 3)
+                self.weight = 10
+                self.durability = 1
+                self.soluble = True
+
+        class ExplosionWave(Special):
+            def __init__(self, power, range):
+                super().__init__()
+                self.type = "explosion_wave"
+                self.weight = 20
+                self.durability = 1000
+                self.soluble = True
+                self.power = power
+                self.range = range
+                self.color = gradient_color((255, 106, 0), (0, 0, 0), self.range * 25)
+                self.life_tick = 2
+
+            def fade(self):
+                self.life_tick -= 1
 
 
 sandbox = Sandbox()
