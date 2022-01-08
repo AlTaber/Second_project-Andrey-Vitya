@@ -138,6 +138,8 @@ class Board:
                 self.replace(coords, "salt")
             else:
                 self.replace(coords, "vapor")
+        elif element.type in ["ice", "snow"]:
+            self.replace(coords, "water")
 
     def fade(self, coords):
         if self.board[coords[0]][coords[1]].cls in ["ignitable_solid"] and \
@@ -161,6 +163,15 @@ class Board:
         if self.board[coords[0]][coords[1]].type == "water":
             self.replace(coords, "salt_water")
 
+    def ice(self, coords):
+        if self.board[coords[0]][coords[1]].type == "water":
+            if random.randint(0, 50) == 0:
+                self.replace(coords, "ice")
+        elif self.board[coords[0]][coords[1]].type == "vapor":
+            if random.randint(0, 30) == 0:
+                self.replace(coords, "snow")
+
+
     def tick_board(self):
         if self.pause:
             return
@@ -171,6 +182,7 @@ class Board:
         to_fire_on_burning = []
         to_fade = []
         to_salt = []
+        to_ice = []
         for i in random_i:
             for j in range(self.height):
                 element = self.board[j][i]
@@ -216,6 +228,12 @@ class Board:
                             to_salt.append(coords)
                         if random.randint(0, 2) == 0:
                             self.replace((j, i), "air")
+                elif element.type == "ice":
+                    neighbors = self.get_neighbors_coords((j, i))
+                    if "water" in [self.board[x[0]][x[1]].type for x in neighbors]:
+                        for coords in neighbors:
+                            to_ice.append(coords)
+
                 # физика элемента
                 if element.cls == "falling":
                     if j != self.height - 1:
@@ -249,6 +267,8 @@ class Board:
                         if step_r_l:
                             to_switch.append(((j, i), (j, i + random.choice(step_r_l))))
 
+        # Преимущества происходящих событий во время одного тика
+
         for co in to_switch:
             self.switch(co[0], co[1])
 
@@ -264,6 +284,9 @@ class Board:
         for co in to_salt:
             self.salt(co)
 
+        for co in to_ice:
+            self.ice(co)
+
     def generate_material(self, m_type):
         return {"air": Sandbox.GameObjects.Air(), "sand": Sandbox.GameObjects.Sand(),
                 "water": Sandbox.GameObjects.Water(), "iron": Sandbox.GameObjects.Iron(),
@@ -272,7 +295,8 @@ class Board:
                 "dirt": Sandbox.GameObjects.Dirt(), "oil": Sandbox.GameObjects.Oil(),
                 "wood": Sandbox.GameObjects.Wood(), "coal": Sandbox.GameObjects.Coal(),
                 "fire_5": Sandbox.GameObjects.Fire(5), "salt": Sandbox.GameObjects.Salt(),
-                "salt_water": Sandbox.GameObjects.SWater()}[m_type]
+                "salt_water": Sandbox.GameObjects.SWater(), "ice": Sandbox.GameObjects.Ice(),
+                "snow": Sandbox.GameObjects.Snow()}[m_type]
 
 
 class ManageMenu:
@@ -309,6 +333,8 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (140, 160), (40, 40), "coal_icon.png", "M", "coal"))
         self.buttons.append(ManageMenu.Button(self, (5, 205), (40, 40), "salt_icon.png", "M", "salt"))
         self.buttons.append(ManageMenu.Button(self, (50, 205), (40, 40), "salt_water_icon.png", "M", "salt_water"))
+        self.buttons.append(ManageMenu.Button(self, (95, 205), (40, 40), "ice_icon.png", "M", "ice"))
+        self.buttons.append(ManageMenu.Button(self, (140, 205), (40, 40), "snow_icon.png", "M", "snow"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
@@ -591,6 +617,7 @@ class Sandbox:
                 self.type = "vapor"
                 self.color = approximate_color(222, 222, 222, 3)
                 self.weight = -11
+                self.durability = 10
 
         class Fire(Special):
             def __init__(self, temperature):
@@ -600,6 +627,7 @@ class Sandbox:
                 self.weight = -100
                 self.temperature = temperature
                 self.soluble = False
+                self.durability = 0
 
             def fade(self):
                 self.temperature -= 1
@@ -653,7 +681,7 @@ class Sandbox:
                 self.type = "wood"
                 self.color = approximate_color(101, 67, 33, 2)
                 self.weight = 20
-                self.durability = 4
+                self.durability = 5
                 self.extinct_chance = 110
 
             def random_burning_color(self):
@@ -695,6 +723,24 @@ class Sandbox:
                 self.color = approximate_color(84, 92, 176, 10)
                 self.weight = 8
                 self.durability = 10
+
+        class Ice(Solid):
+            def __init__(self):
+                super().__init__()
+                self.type = "ice"
+                self.color = approximate_color(47, 133, 204, 1)
+                self.weight = 20
+                self.durability = 2
+                self.soluble = False
+
+        class Snow(Falling):
+            def __init__(self):
+                super().__init__()
+                self.type = "snow"
+                self.color = approximate_color(171, 196, 217, 4)
+                self.weight = 6
+                self.durability = 2
+                self.soluble = False
 
 
 sandbox = Sandbox()
