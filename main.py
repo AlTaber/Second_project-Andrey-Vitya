@@ -452,7 +452,7 @@ class Sandbox:
 
     def run_game(self):
         pygame.display.set_icon(load_image("water_icon.png"))
-        pygame.display.set_caption("Sandox by: AlTaberOwO#2920 , AndrDD#2528")
+        pygame.display.set_caption("DiversityBox by: AlTaberOwO#2920 , AndrDD#2528")
         screen = self.screen
         clock = pygame.time.Clock()
         max_fps = 30
