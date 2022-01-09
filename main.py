@@ -134,7 +134,7 @@ class Board:
             self.replace(coords, "vapor")
         elif element.type == "acid":
             self.replace(coords, "acid_vapor")
-        elif element.cls in ["ignitable_solid", "ignitable_liquid"]:
+        elif element.cls in ["ignitable_solid", "ignitable_liquid", "ignitable_falling"]:
             neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
             if 'air' in neighbors and "water" not in neighbors and "vapor" not in neighbors and\
                     "salt_water" not in neighbors:
@@ -150,9 +150,13 @@ class Board:
             self.replace(coords, "water")
         elif element.type == "gunpowder":
             self.explode(coords)
+        elif element.type == "methane":
+            self.replace(coords, "fire_5")
+        elif element.type == "wick":
+            self.board[coords[0]][coords[1]].activate()
 
     def fade(self, coords):
-        if self.board[coords[0]][coords[1]].cls in ["ignitable_solid"] and \
+        if self.board[coords[0]][coords[1]].cls in ["ignitable_solid", "ignitable_falling"] and \
            self.board[coords[0]][coords[1]].burning:
             neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
             if ("air" not in neighbors and "fire" not in neighbors) or "salt_water" in neighbors or \
@@ -234,7 +238,7 @@ class Board:
                             to_fire_on_burning.append(coords)
                         if random.randint(0, element.extinct_chance) == 0:
                             self.replace((j, i), "air")
-                elif element.cls == "ignitable_solid":
+                elif element.cls in ["ignitable_solid", "ignitable_falling"]:
                     if element.burning:
                         to_fade.append((j, i))
                         self.board[j][i].random_burning_color()
@@ -263,9 +267,14 @@ class Board:
                         to_expwave.append((j, i))
                         for coords in self.get_neighbors_coords((j, i)):
                             to_fire.append(coords)
+                elif element.type == "wick":
+                    if element.activated:
+                        for coords in self.get_neighbors_coords((j, i)):
+                            to_fire.append(coords)
+                        self.replace((j, i), "air")
 
                 # физика элемента
-                if element.cls == "falling":
+                if element.cls in ["falling", "ignitable_falling"]:
                     if j != self.height - 1:
                         if element.weight > self.board[j + 1][i].weight:
                             to_switch.append(((j, i), (j + 1, i)))
@@ -331,7 +340,9 @@ class Board:
                 "salt_water": Sandbox.GameObjects.SWater(), "ice": Sandbox.GameObjects.Ice(),
                 "snow": Sandbox.GameObjects.Snow(), "gunpowder": Sandbox.GameObjects.Gunpowder(),
                 "explosion_wave_gp": Sandbox.GameObjects.ExplosionWave(4, 4),
-                "explosion_wave_5_5": Sandbox.GameObjects.ExplosionWave(5, 5)}[m_type]
+                "explosion_wave_5_5": Sandbox.GameObjects.ExplosionWave(5, 5),
+                "sawdust": Sandbox.GameObjects.Sawdust(), "methane": Sandbox.GameObjects.Methane(),
+                "wick": Sandbox.GameObjects.Wick()}[m_type]
 
 
 class ManageMenu:
@@ -373,6 +384,9 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (50, 205), (40, 40), "gunpowder_icon.png", "M", "gunpowder"))
         self.buttons.append(ManageMenu.Button(self, (95, 205), (40, 40), "explosion_wave_icon.png",
                                               "M", "explosion_wave_5_5"))
+        self.buttons.append(ManageMenu.Button(self, (140, 205), (40, 40), "sawdust_icon.png", "M", "sawdust"))
+        self.buttons.append(ManageMenu.Button(self, (185, 205), (40, 40), "methane_icon.png", "M", "methane"))
+        self.buttons.append(ManageMenu.Button(self, (5, 250), (40, 40), "wick_icon.png", "M", "wick"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
@@ -602,7 +616,7 @@ class Sandbox:
                 super().__init__()
                 self.cls = "ignitable_solid"
                 self.durability = 1
-                self.soluble = True
+                self.soluble = None
                 self.burning = False
                 self.extinct_chance = 0
 
@@ -612,8 +626,20 @@ class Sandbox:
             def fade(self):
                 self.burning = False
 
-            def random_burning_color(self):
-                self.color = approximate_color(217, 119, 0, 2)
+        class IgnitableF(Falling):
+            def __init__(self):
+                super().__init__()
+                self.cls = "ignitable_falling"
+                self.durability = 1
+                self.soluble = None
+                self.burning = False
+                self.extinct_chance = 0
+
+            def burn(self):
+                self.burning = True
+
+            def fade(self):
+                self.burning = False
 
         # Основные вещества
         class Air(Gas):
@@ -722,13 +748,10 @@ class Sandbox:
                 self.weight = 20
                 self.durability = 2
                 self.extinct_chance = 110
+                self.soluble = True
 
             def random_burning_color(self):
-                self.color = approximate_color(247, 135, 7, 10)
-
-            def fade(self):
-                super().fade()
-                self.color = approximate_color(101, 67, 33, 2)
+                self.color = approximate_color(20, 14, 11, 10)
 
         class Coal(IgnitableS):
             def __init__(self):
@@ -738,13 +761,10 @@ class Sandbox:
                 self.weight = 20
                 self.durability = 2
                 self.extinct_chance = 200
-
-            def fade(self):
-                super().fade()
-                self.color = approximate_color(15, 14, 23, 2)
+                self.soluble = True
 
             def random_burning_color(self):
-                self.color = approximate_color(247, 99, 7, 10)
+                self.color = approximate_color(56, 50, 45, 10)
 
         class Salt(Falling):
             def __init__(self):
@@ -780,6 +800,7 @@ class Sandbox:
                 self.weight = 6
                 self.durability = 2
                 self.soluble = False
+
         class Gunpowder(Falling):
             def __init__(self):
                 super().__init__()
@@ -804,6 +825,40 @@ class Sandbox:
             def fade(self):
                 self.life_tick -= 1
 
+        class Sawdust(IgnitableF):
+            def __init__(self):
+                super().__init__()
+                self.type = "sawdust"
+                self.color = approximate_color(179, 104, 20, 4)
+                self.weight = 10
+                self.durability = 1
+                self.soluble = True
+                self.extinct_chance = 70
+
+            def random_burning_color(self):
+                self.color = approximate_color(20, 14, 11, 10)
+
+        class Methane(Gas):
+            def __init__(self):
+                super().__init__()
+                self.type = "methane"
+                self.color = approximate_color(26, 26, 26, 3)
+                self.weight = -11
+                self.durability = 1
+
+        class Wick(Solid):
+            def __init__(self):
+                super().__init__()
+                self.type = "wick"
+                self.color = approximate_color(7, 61, 19, 4)
+                self.weight = 20
+                self.durability = 1
+                self.soluble = True
+                self.activated = False
+
+            def activate(self):
+                self.activated = True
+                self.color = approximate_color(245, 110, 0, 5)
 
 sandbox = Sandbox()
 sandbox.run_game()
