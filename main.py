@@ -51,6 +51,8 @@ class Board:
         self.current_material = "air"
         self.brush = 1
         self.pause = False
+        self.physics = True
+        self.features = True
 
     def set_view(self, left, top, cell_size):
         self.left = left
@@ -112,11 +114,14 @@ class Board:
     def clear(self):
         self.board = [[Sandbox.GameObjects.Air()] * self.width for _ in range(self.height)]
 
-    def set_pause(self, true):
-        if true:
-            self.pause = True
-        else:
-            self.pause = False
+    def set_pause(self):
+        self.pause = not self.pause
+
+    def toggle_obj_physics(self):
+        self.physics = not self.physics
+
+    def toggle_obj_features(self):
+        self.features = not self.features
 
     def get_neighbors_coords(self, cell):
         result = []
@@ -130,6 +135,9 @@ class Board:
 
     def fire(self, coords):
         element = self.board[coords[0]][coords[1]]
+        if element.freezed:
+            self.board[coords[0]][coords[1]].unfreeze()
+            return
         if element.type == "water":
             self.replace(coords, "vapor")
         elif element.type == "acid":
@@ -137,7 +145,7 @@ class Board:
         elif element.cls in ["ignitable_solid", "ignitable_liquid", "ignitable_falling"]:
             neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
             if 'air' in neighbors and "water" not in neighbors and "vapor" not in neighbors and\
-                    "salt_water" not in neighbors:
+                    "salt_water" not in neighbors and "liquid_nitrogen" not in neighbors:
                 self.board[coords[0]][coords[1]].burn()
         elif element.type == "salt_water":
             air_neighbors = self.get_air_neighbors_coords(coords)
@@ -160,7 +168,7 @@ class Board:
            self.board[coords[0]][coords[1]].burning:
             neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
             if ("air" not in neighbors and "fire" not in neighbors) or "salt_water" in neighbors or \
-                    "water" in neighbors or "vapor" in neighbors:
+                    "water" in neighbors or "vapor" in neighbors or "liquid_nitrogen" in neighbors:
                 self.board[coords[0]][coords[1]].fade()
 
     def set_fire_on_burning(self, coords):
@@ -184,6 +192,20 @@ class Board:
         elif self.board[coords[0]][coords[1]].type == "vapor":
             if random.randint(0, 30) == 0:
                 self.replace(coords, "snow")
+
+    def freeze(self, coords):
+        element = self.board[coords[0]][coords[1]]
+        if element.freezed:
+            return
+        if element.cls in ["ignitable_solid", "ignitable_falling", "ignitable_liquid"]:
+            if element.burning:
+                element.fade()
+        elif element.type in ["water", "salt_water"]:
+            self.replace(coords, "ice")
+        elif element.type in ["fire"]:
+            self.replace(coords, "air")
+        if element.can_be_freezed:
+            self.board[coords[0]][coords[1]].freeze()
 
     def explode(self, coords):
         if self.board[coords[0]][coords[1]].type == "gunpowder":
@@ -209,102 +231,115 @@ class Board:
         to_salt = []
         to_ice = []
         to_expwave = []
+        to_freeze = []
         for i in random_i:
             for j in range(self.height):
                 element = self.board[j][i]
+                if element.freezed:
+                    continue
                 # свойства элемента
-                if element.type == "vapor":
-                    if random.randint(0, 50) == 0:
-                        self.replace((j, i), "water")
-                elif element.type == "acid_vapor":
-                    if random.randint(0, 35) == 0:
-                        self.replace((j, i), "acid")
-                elif element.type == "fire":
-                    if element.temperature <= 1:
-                        self.replace((j, i), "air")
-                    else:
-                        self.board[j][i].fade()
-                    for coords in self.get_neighbors_coords((j, i)):
-                        to_fire.append(coords)
-                elif element.type in ["acid", "acid_vapor"]:
-                    for coords in self.get_neighbors_coords((j, i)):
+                if self.features:
+                    if element.type == "vapor":
+                        if random.randint(0, 50) == 0:
+                            self.replace((j, i), "water")
+                    elif element.type == "acid_vapor":
                         if random.randint(0, 35) == 0:
-                            if self.acid(coords):
+                            self.replace((j, i), "acid")
+                    elif element.type == "fire":
+                        if element.temperature <= 1:
+                            self.replace((j, i), "air")
+                        else:
+                            self.board[j][i].fade()
+                        for coords in self.get_neighbors_coords((j, i)):
+                            to_fire.append(coords)
+                    elif element.type in ["acid", "acid_vapor"]:
+                        for coords in self.get_neighbors_coords((j, i)):
+                            if random.randint(0, 35) == 0:
+                                if self.acid(coords):
+                                    self.replace((j, i), "air")
+                    elif element.cls == "ignitable_liquid":
+                        if element.burning:
+                            for coords in self.get_neighbors_coords((j, i)):
+                                to_fire.append(coords)
+                                to_fire_on_burning.append(coords)
+                            if random.randint(0, element.extinct_chance) == 0:
                                 self.replace((j, i), "air")
-                elif element.cls == "ignitable_liquid":
-                    if element.burning:
-                        for coords in self.get_neighbors_coords((j, i)):
-                            to_fire.append(coords)
-                            to_fire_on_burning.append(coords)
-                        if random.randint(0, element.extinct_chance) == 0:
+                    elif element.cls in ["ignitable_solid", "ignitable_falling"]:
+                        if element.burning:
+                            to_fade.append((j, i))
+                            self.board[j][i].random_burning_color()
+                            for coords in self.get_neighbors_coords((j, i)):
+                                to_fire.append(coords)
+                                to_fire_on_burning.append(coords)
+                            if random.randint(0, element.extinct_chance) == 0:
+                                self.replace((j, i), "air")
+                    elif element.type == "salt":
+                        neighbors = self.get_neighbors_coords((j, i))
+                        if "water" in [self.board[x[0]][x[1]].type for x in neighbors]:
+                            for coords in neighbors:
+                                to_salt.append(coords)
+                            if random.randint(0, 2) == 0:
+                                self.replace((j, i), "air")
+                    elif element.type == "ice":
+                        neighbors = self.get_neighbors_coords((j, i))
+                        if "water" in [self.board[x[0]][x[1]].type for x in neighbors]:
+                            for coords in neighbors:
+                                to_ice.append(coords)
+                    elif element.type == "explosion_wave":
+                        if element.life_tick <= 0 or element.range <= 0:
                             self.replace((j, i), "air")
-                elif element.cls in ["ignitable_solid", "ignitable_falling"]:
-                    if element.burning:
-                        to_fade.append((j, i))
-                        self.board[j][i].random_burning_color()
-                        for coords in self.get_neighbors_coords((j, i)):
-                            to_fire.append(coords)
-                            to_fire_on_burning.append(coords)
-                        if random.randint(0, element.extinct_chance) == 0:
+                        else:
+                            self.board[j][i].fade()
+                            to_expwave.append((j, i))
+                            for coords in self.get_neighbors_coords((j, i)):
+                                to_fire.append(coords)
+                    elif element.type == "wick":
+                        if element.activated:
+                            for coords in self.get_neighbors_coords((j, i)):
+                                to_fire.append(coords)
                             self.replace((j, i), "air")
-                elif element.type == "salt":
-                    neighbors = self.get_neighbors_coords((j, i))
-                    if "water" in [self.board[x[0]][x[1]].type for x in neighbors]:
-                        for coords in neighbors:
-                            to_salt.append(coords)
-                        if random.randint(0, 2) == 0:
+                    elif element.type == "liquid_nitrogen":
+                        for coords in self.get_neighbors_coords((j, i)):
+                            to_freeze.append(coords)
+                        if random.randint(0, 110) == 0:
+                            self.replace((j, i), "nitrogen")
+                    elif element.type == "nitrogen":
+                        if random.randint(0, 10) == 0:
                             self.replace((j, i), "air")
-                elif element.type == "ice":
-                    neighbors = self.get_neighbors_coords((j, i))
-                    if "water" in [self.board[x[0]][x[1]].type for x in neighbors]:
-                        for coords in neighbors:
-                            to_ice.append(coords)
-                elif element.type == "explosion_wave":
-                    if element.life_tick <= 0 or element.range <= 0:
-                        self.replace((j, i), "air")
-                    else:
-                        self.board[j][i].fade()
-                        to_expwave.append((j, i))
-                        for coords in self.get_neighbors_coords((j, i)):
-                            to_fire.append(coords)
-                elif element.type == "wick":
-                    if element.activated:
-                        for coords in self.get_neighbors_coords((j, i)):
-                            to_fire.append(coords)
-                        self.replace((j, i), "air")
 
                 # физика элемента
-                if element.cls in ["falling", "ignitable_falling"]:
-                    if j != self.height - 1:
-                        if element.weight > self.board[j + 1][i].weight:
-                            to_switch.append(((j, i), (j + 1, i)))
-                elif element.cls in ["liquid", "gas", "ignitable_liquid"]:
-                    flag = True
-                    if j != self.height - 1:
-                        if element.weight > self.board[j + 1][i].weight:
-                            to_switch.append(((j, i), (j + 1, i)))
-                            flag = False
-                        else:
-                            d_step_r_l = []
-                            if i != 0:
-                                if element.weight > self.board[j + 1][i - 1].weight:
-                                    d_step_r_l.append(-1)
-                            if i != self.width - 1:
-                                if element.weight > self.board[j + 1][i + 1].weight:
-                                    d_step_r_l.append(1)
-                            if d_step_r_l:
-                                to_switch.append(((j, i), (j + 1, i + random.choice(d_step_r_l))))
+                if self.physics:
+                    if element.cls in ["falling", "ignitable_falling"]:
+                        if j != self.height - 1:
+                            if element.weight > self.board[j + 1][i].weight:
+                                to_switch.append(((j, i), (j + 1, i)))
+                    elif element.cls in ["liquid", "gas", "ignitable_liquid"]:
+                        flag = True
+                        if j != self.height - 1:
+                            if element.weight > self.board[j + 1][i].weight:
+                                to_switch.append(((j, i), (j + 1, i)))
                                 flag = False
-                    if flag:
-                        step_r_l = []
-                        if i != 0:
-                            if self.board[j][i - 1].weight < element.weight:
-                                step_r_l.append(-1)
-                        if i != self.width - 1:
-                            if self.board[j][i + 1].weight < element.weight:
-                                step_r_l.append(1)
-                        if step_r_l:
-                            to_switch.append(((j, i), (j, i + random.choice(step_r_l))))
+                            else:
+                                d_step_r_l = []
+                                if i != 0:
+                                    if element.weight > self.board[j + 1][i - 1].weight:
+                                        d_step_r_l.append(-1)
+                                if i != self.width - 1:
+                                    if element.weight > self.board[j + 1][i + 1].weight:
+                                        d_step_r_l.append(1)
+                                if d_step_r_l:
+                                    to_switch.append(((j, i), (j + 1, i + random.choice(d_step_r_l))))
+                                    flag = False
+                        if flag:
+                            step_r_l = []
+                            if i != 0:
+                                if self.board[j][i - 1].weight < element.weight:
+                                    step_r_l.append(-1)
+                            if i != self.width - 1:
+                                if self.board[j][i + 1].weight < element.weight:
+                                    step_r_l.append(1)
+                            if step_r_l:
+                                to_switch.append(((j, i), (j, i + random.choice(step_r_l))))
 
         # Преимущества происходящих событий во время одного тика
 
@@ -329,6 +364,9 @@ class Board:
         for co in to_ice:
             self.ice(co)
 
+        for co in to_freeze:
+            self.freeze(co)
+
     def generate_material(self, m_type):
         return {"air": Sandbox.GameObjects.Air(), "sand": Sandbox.GameObjects.Sand(),
                 "water": Sandbox.GameObjects.Water(), "iron": Sandbox.GameObjects.Iron(),
@@ -342,7 +380,8 @@ class Board:
                 "explosion_wave_gp": Sandbox.GameObjects.ExplosionWave(4, 4),
                 "explosion_wave_5_5": Sandbox.GameObjects.ExplosionWave(5, 5),
                 "sawdust": Sandbox.GameObjects.Sawdust(), "methane": Sandbox.GameObjects.Methane(),
-                "wick": Sandbox.GameObjects.Wick()}[m_type]
+                "wick": Sandbox.GameObjects.Wick(), "liquid_nitrogen": Sandbox.GameObjects.LNitrogen(),
+                "nitrogen": Sandbox.GameObjects.Nitrogen()}[m_type]
 
 
 class ManageMenu:
@@ -387,10 +426,14 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (140, 205), (40, 40), "sawdust_icon.png", "M", "sawdust"))
         self.buttons.append(ManageMenu.Button(self, (185, 205), (40, 40), "methane_icon.png", "M", "methane"))
         self.buttons.append(ManageMenu.Button(self, (5, 250), (40, 40), "wick_icon.png", "M", "wick"))
+        self.buttons.append(ManageMenu.Button(self, (50, 250), (40, 40), "empty.png", "M", "liquid_nitrogen"))
 
-        self.buttons.append(ManageMenu.Button(self, (5, 620), (40, 40), "clear_icon.png", "C", "clear"))
-        self.buttons.append(ManageMenu.Button(self, (50, 620), (40, 40), "pause_icon.png", "C", "pause"))
-        self.buttons.append(ManageMenu.Button(self, (95, 620), (40, 40), "rainbow_icon.png", "C", "rainbow_change"))
+        self.buttons.append(ManageMenu.Button(self, (5, 630), (40, 40), "clear_icon.png", "C", "clear"))
+        self.buttons.append(ManageMenu.Button(self, (50, 630), (40, 40), "pause_icon.png", "CT", "pause"))
+        self.buttons.append(ManageMenu.Button(self, (95, 630), (40, 40), "rainbow_icon.png", "CT", "rainbow_change"))
+        self.buttons.append(ManageMenu.Button(self, (140, 630), (40, 40), "empty.png", "CT", "toggle_obj_f"))
+        self.buttons.append(ManageMenu.Button(self, (185, 630), (40, 40), "empty.png", "CT", "toggle_obj_p"))
+        self.buttons.append(ManageMenu.Button(self, (5, 585), (40, 40), "empty.png", "CT", "slow_motion"))
 
     def set_button_width(self, width):
         self.button_width = width
@@ -428,6 +471,9 @@ class ManageMenu:
                 self.parent.set_material(self.action)
             elif self.button_type == 'C':
                 self.parent.custom_action(self.action)
+            elif self.button_type == "CT":
+                self.selected = not self.selected
+                self.parent.custom_action(self.action)
 
     def render(self, surf):
         for button in self.buttons:
@@ -462,9 +508,15 @@ class ManageMenu:
         if action_id == "clear":
             self.link_with_board.clear()
         elif action_id == "pause":
-            self.link_with_board.set_pause(not self.link_with_board.pause)
+            self.link_with_board.set_pause()
         elif action_id == "rainbow_change":
             self.parent.rainbow_change()
+        elif action_id == "toggle_obj_f":
+            self.link_with_board.toggle_obj_features()
+        elif action_id == "toggle_obj_p":
+            self.link_with_board.toggle_obj_physics()
+        elif action_id == "slow_motion":
+            self.parent.slow_motion_toggle()
 
     def get_button(self, mouse_pos):
         for button in self.buttons:
@@ -495,6 +547,7 @@ class Sandbox:
         self.board = Board(50, 42)
         pygame.init()
         self.size = self.width, self.height = 1040, 692
+        self.max_fps = 30
         self.screen = pygame.display.set_mode(self.size, pygame.DOUBLEBUF)
         self.board.set_view(2, 2, 16)
         self.rainbow_color = pygame.Color(0)
@@ -507,7 +560,6 @@ class Sandbox:
         pygame.display.set_caption("DiversityBox by: AlTaberOwO#2920 , AndrDD#2528")
         screen = self.screen
         clock = pygame.time.Clock()
-        max_fps = 30
         running = True
         hold = False
         self.board.set_material("air")
@@ -535,7 +587,7 @@ class Sandbox:
             self.board.render(screen)
             self.menu.render(screen)
             self.board.tick_board()
-            clock.tick(max_fps)
+            clock.tick(self.max_fps)
             fps_now = str(clock.get_fps())[:4]
             text = fps_font.render(fps_now + " FPS", True, (220, 220, 220))
 
@@ -554,6 +606,9 @@ class Sandbox:
         else:
             self.rainbow_color = (80, 80, 80)
 
+    def slow_motion_toggle(self):
+        self.max_fps = {30: 10, 10: 30}[self.max_fps]
+
     class GameObjects:
         class Object:
             def __init__(self):
@@ -563,6 +618,26 @@ class Sandbox:
                 self.weight = None
                 self.durability = None
                 self.soluble = None
+                self.can_be_freezed = None
+                self.freezed = False
+                self.original_color = None
+                self.original_weight = None
+                self.original_durability = None
+
+            def freeze(self):
+                self.original_color = self.color
+                self.original_weight = self.weight
+                self.original_durability = self.durability
+                self.color = gradient_color((214, 243, 255), self.color, 40)
+                self.weight = 20
+                self.durability = 0
+                self.freezed = True
+
+            def unfreeze(self):
+                self.color = self.original_color
+                self.durability = self.original_durability
+                self.weight = self.original_weight
+                self.freezed = False
 
         # Типы веществ
         class Gas(Object):
@@ -571,6 +646,7 @@ class Sandbox:
                 self.cls = "gas"
                 self.soluble = False
                 self.durability = 1
+                self.can_be_freezed = False
 
         class Falling(Object):
             def __init__(self):
@@ -649,6 +725,7 @@ class Sandbox:
                 self.color = [0, 0, 0]
                 self.weight = -10
                 self.durability = 0
+                self.can_be_freezed = False
 
         class Sand(Falling):
             def __init__(self):
@@ -658,6 +735,7 @@ class Sandbox:
                 self.weight = 10
                 self.durability = 1
                 self.soluble = False
+                self.can_be_freezed = True
 
         class Water(Liquid):
             def __init__(self):
@@ -666,6 +744,7 @@ class Sandbox:
                 self.color = approximate_color(30, 30, 200, 10)
                 self.weight = 7
                 self.durability = 3
+                self.can_be_freezed = False
 
         class Iron(Solid):
             def __init__(self):
@@ -675,6 +754,7 @@ class Sandbox:
                 self.weight = 20
                 self.durability = 3
                 self.soluble = True
+                self.can_be_freezed = True
 
         class Vapor(Gas):
             def __init__(self):
@@ -693,6 +773,7 @@ class Sandbox:
                 self.temperature = temperature
                 self.soluble = False
                 self.durability = 1
+                self.can_be_freezed = False
 
             def fade(self):
                 self.temperature -= 1
@@ -705,6 +786,7 @@ class Sandbox:
                 self.color = approximate_color(130, 227, 27, 10)
                 self.weight = 7
                 self.durability = 3
+                self.can_be_freezed = True
 
         class AVapor(Gas):
             def __init__(self):
@@ -722,6 +804,7 @@ class Sandbox:
                 self.weight = 10
                 self.durability = 1
                 self.soluble = True
+                self.can_be_freezed = True
 
         class Oil(IgnitableL):
             def __init__(self):
@@ -731,6 +814,7 @@ class Sandbox:
                 self.weight = 6
                 self.durability = 1
                 self.extinct_chance = 20
+                self.can_be_freezed = True
 
             def burn(self):
                 super().burn()
@@ -749,6 +833,7 @@ class Sandbox:
                 self.durability = 2
                 self.extinct_chance = 110
                 self.soluble = True
+                self.can_be_freezed = True
 
             def random_burning_color(self):
                 self.color = approximate_color(20, 14, 11, 10)
@@ -762,6 +847,7 @@ class Sandbox:
                 self.durability = 2
                 self.extinct_chance = 200
                 self.soluble = True
+                self.can_be_freezed = True
 
             def random_burning_color(self):
                 self.color = approximate_color(56, 50, 45, 10)
@@ -774,6 +860,7 @@ class Sandbox:
                 self.weight = 10
                 self.durability = 1
                 self.soluble = True
+                self.can_be_freezed = True
 
         class SWater(Liquid):
             def __init__(self):
@@ -782,6 +869,7 @@ class Sandbox:
                 self.color = approximate_color(84, 92, 176, 10)
                 self.weight = 8
                 self.durability = 3
+                self.can_be_freezed = True
 
         class Ice(Solid):
             def __init__(self):
@@ -791,6 +879,7 @@ class Sandbox:
                 self.weight = 20
                 self.durability = 2
                 self.soluble = False
+                self.can_be_freezed = True
 
         class Snow(Falling):
             def __init__(self):
@@ -800,6 +889,7 @@ class Sandbox:
                 self.weight = 6
                 self.durability = 2
                 self.soluble = False
+                self.can_be_freezed = True
 
         class Gunpowder(Falling):
             def __init__(self):
@@ -809,6 +899,7 @@ class Sandbox:
                 self.weight = 10
                 self.durability = 1
                 self.soluble = True
+                self.can_be_freezed = True
 
         class ExplosionWave(Special):
             def __init__(self, power, range):
@@ -816,11 +907,12 @@ class Sandbox:
                 self.type = "explosion_wave"
                 self.weight = 20
                 self.durability = 1000
-                self.soluble = True
+                self.soluble = False
                 self.power = power
                 self.range = range
                 self.color = gradient_color((255, 106, 0), (0, 0, 0), self.range * 25)
                 self.life_tick = 2
+                self.can_be_freezed = False
 
             def fade(self):
                 self.life_tick -= 1
@@ -834,6 +926,7 @@ class Sandbox:
                 self.durability = 1
                 self.soluble = True
                 self.extinct_chance = 70
+                self.can_be_freezed = True
 
             def random_burning_color(self):
                 self.color = approximate_color(20, 14, 11, 10)
@@ -855,10 +948,29 @@ class Sandbox:
                 self.durability = 1
                 self.soluble = True
                 self.activated = False
+                self.can_be_freezed = True
 
             def activate(self):
                 self.activated = True
                 self.color = approximate_color(245, 110, 0, 5)
+
+        class LNitrogen(Liquid):
+            def __init__(self):
+                super().__init__()
+                self.type = "liquid_nitrogen"
+                self.color = approximate_color(210, 236, 247, 10)
+                self.weight = 7
+                self.durability = 3
+                self.can_be_freezed = False
+
+        class Nitrogen(Gas):
+            def __init__(self):
+                super().__init__()
+                self.type = "nitrogen"
+                self.color = approximate_color(210, 236, 247, 3)
+                self.weight = -11
+                self.durability = 1
+
 
 sandbox = Sandbox()
 sandbox.run_game()
