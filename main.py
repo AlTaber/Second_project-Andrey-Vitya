@@ -162,6 +162,8 @@ class Board:
             self.replace(coords, "fire_5")
         elif element.type == "wick":
             self.board[coords[0]][coords[1]].activate()
+        elif element.type == "wax":
+            self.replace(coords, "liquid_wax")
 
     def fade(self, coords):
         if self.board[coords[0]][coords[1]].cls in ["ignitable_solid", "ignitable_falling"] and \
@@ -190,7 +192,7 @@ class Board:
             if random.randint(0, 50) == 0:
                 self.replace(coords, "ice")
         elif self.board[coords[0]][coords[1]].type == "vapor":
-            if random.randint(0, 30) == 0:
+            if random.randint(0, 15) == 0:
                 self.replace(coords, "snow")
 
     def freeze(self, coords):
@@ -204,6 +206,8 @@ class Board:
             self.replace(coords, "ice")
         elif element.type in ["fire"]:
             self.replace(coords, "air")
+        elif element.type == "liquid_wax":
+            self.replace(coords, "wax")
         if element.can_be_freezed:
             self.board[coords[0]][coords[1]].freeze()
 
@@ -236,6 +240,10 @@ class Board:
             for j in range(self.height):
                 element = self.board[j][i]
                 if element.freezed:
+                    neighbors = self.get_neighbors_coords((j, i))
+                    if "water" in [self.board[x[0]][x[1]].type for x in neighbors]:
+                        for coords in neighbors:
+                            to_ice.append(coords)
                     continue
                 # свойства элемента
                 if self.features:
@@ -306,6 +314,10 @@ class Board:
                     elif element.type == "nitrogen":
                         if random.randint(0, 10) == 0:
                             self.replace((j, i), "air")
+                    elif element.type == "liquid_wax":
+                        if random.randint(0, 50) == 0 and ((j + 1, i) not in self.get_neighbors_coords((j, i)) or
+                        self.board[j + 1][i].weight >= element.weight):
+                            self.replace((j, i), "wax")
 
                 # физика элемента
                 if self.physics:
@@ -381,7 +393,8 @@ class Board:
                 "explosion_wave_5_5": Sandbox.GameObjects.ExplosionWave(5, 5),
                 "sawdust": Sandbox.GameObjects.Sawdust(), "methane": Sandbox.GameObjects.Methane(),
                 "wick": Sandbox.GameObjects.Wick(), "liquid_nitrogen": Sandbox.GameObjects.LNitrogen(),
-                "nitrogen": Sandbox.GameObjects.Nitrogen()}[m_type]
+                "nitrogen": Sandbox.GameObjects.Nitrogen(), "wax": Sandbox.GameObjects.Wax(),
+                "liquid_wax": Sandbox.GameObjects.LWax()}[m_type]
 
 
 class ManageMenu:
@@ -426,14 +439,18 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (140, 205), (40, 40), "sawdust_icon.png", "M", "sawdust"))
         self.buttons.append(ManageMenu.Button(self, (185, 205), (40, 40), "methane_icon.png", "M", "methane"))
         self.buttons.append(ManageMenu.Button(self, (5, 250), (40, 40), "wick_icon.png", "M", "wick"))
-        self.buttons.append(ManageMenu.Button(self, (50, 250), (40, 40), "empty.png", "M", "liquid_nitrogen"))
+        self.buttons.append(ManageMenu.Button(self, (50, 250), (40, 40), "liquid_nitrogen_icon.png",
+                                              "M", "liquid_nitrogen"))
+        self.buttons.append(ManageMenu.Button(self, (95, 250), (40, 40), "wax_icon.png", "M", "wax"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 630), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 630), (40, 40), "pause_icon.png", "CT", "pause"))
         self.buttons.append(ManageMenu.Button(self, (95, 630), (40, 40), "rainbow_icon.png", "CT", "rainbow_change"))
-        self.buttons.append(ManageMenu.Button(self, (140, 630), (40, 40), "empty.png", "CT", "toggle_obj_f"))
-        self.buttons.append(ManageMenu.Button(self, (185, 630), (40, 40), "empty.png", "CT", "toggle_obj_p"))
-        self.buttons.append(ManageMenu.Button(self, (5, 585), (40, 40), "empty.png", "CT", "slow_motion"))
+        self.buttons.append(ManageMenu.Button(self, (140, 630), (40, 40), "features_toggle_icon.png",
+                                              "CT", "toggle_obj_f"))
+        self.buttons.append(ManageMenu.Button(self, (185, 630), (40, 40), "physics_toggle_icon.png",
+                                              "CT", "toggle_obj_p"))
+        self.buttons.append(ManageMenu.Button(self, (5, 585), (40, 40), "slow_mo_icon.png", "CT", "slow_motion"))
 
     def set_button_width(self, width):
         self.button_width = width
@@ -970,6 +987,26 @@ class Sandbox:
                 self.color = approximate_color(210, 236, 247, 3)
                 self.weight = -11
                 self.durability = 1
+
+        class Wax(Solid):
+            def __init__(self):
+                super().__init__()
+                self.type = "wax"
+                self.color = approximate_color(214, 193, 161, 4)
+                self.weight = 20
+                self.durability = 1
+                self.soluble = True
+                self.can_be_freezed = True
+
+        class LWax(Liquid):
+            def __init__(self):
+                super().__init__()
+                self.type = "liquid_wax"
+                self.color = approximate_color(255, 230, 191, 4)
+                self.weight = 7
+                self.durability = 1
+                self.soluble = True
+                self.can_be_freezed = True
 
 
 sandbox = Sandbox()
