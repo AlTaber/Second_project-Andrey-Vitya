@@ -4,7 +4,6 @@ import os
 import sys
 import ctypes
 
-
 myappid = 'mycompany.myproduct.subproduct.version'
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
@@ -32,6 +31,7 @@ def approximate_color(r, g, b, max_color_modifier):
     g = 255 if g + color_modifier > 255 else (0 if g + color_modifier < 0 else g + color_modifier)
     b = 255 if b + color_modifier > 255 else (0 if b + color_modifier < 0 else b + color_modifier)
     return [r, g, b]
+
 
 def gradient_color(c1, c2, p):
     p = 0 if p < 0 else (100 if p > 100 else p)
@@ -144,7 +144,7 @@ class Board:
             self.replace(coords, "acid_vapor")
         elif element.cls in ["ignitable_solid", "ignitable_liquid", "ignitable_falling"]:
             neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
-            if 'air' in neighbors and "water" not in neighbors and "vapor" not in neighbors and\
+            if 'air' in neighbors and "water" not in neighbors and "vapor" not in neighbors and \
                     "salt_water" not in neighbors and "liquid_nitrogen" not in neighbors:
                 self.board[coords[0]][coords[1]].burn()
         elif element.type == "salt_water":
@@ -165,16 +165,23 @@ class Board:
         elif element.type == "wax":
             self.replace(coords, "liquid_wax")
 
+    def strong_fire(self, coords):
+        element = self.board[coords[0]][coords[1]]
+        if element.type == 'stone' and random.randint(0, 45) == 0:
+            self.replace(coords, 'lava')
+        else:
+            self.fire(coords)
+
     def fade(self, coords):
         if self.board[coords[0]][coords[1]].cls in ["ignitable_solid", "ignitable_falling"] and \
-           self.board[coords[0]][coords[1]].burning:
+                self.board[coords[0]][coords[1]].burning:
             neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
             if ("air" not in neighbors and "fire" not in neighbors) or "salt_water" in neighbors or \
                     "water" in neighbors or "vapor" in neighbors or "liquid_nitrogen" in neighbors:
                 self.board[coords[0]][coords[1]].fade()
 
-    def set_fire_on_burning(self, coords):
-        if self.board[coords[0]][coords[1]].type == "air" and random.randint(0, 20) == 0:
+    def set_fire_on_burning(self, coords, chance):
+        if self.board[coords[0]][coords[1]].type == "air" and random.randint(0, chance) == 0:
             self.replace(coords, "fire_4")
 
     def acid(self, coords):
@@ -208,6 +215,8 @@ class Board:
             self.replace(coords, "air")
         elif element.type == "liquid_wax":
             self.replace(coords, "wax")
+        elif element.type == "lava":
+            self.replace(coords, "stone")
         if element.can_be_freezed:
             self.board[coords[0]][coords[1]].freeze()
 
@@ -228,8 +237,10 @@ class Board:
             return
         random_i = list(range(self.width))
         random.shuffle(random_i)
+        to_lava = []
         to_switch = []
         to_fire = []
+        to_strong_fire = []
         to_fire_on_burning = []
         to_fade = []
         to_salt = []
@@ -260,6 +271,13 @@ class Board:
                             self.board[j][i].fade()
                         for coords in self.get_neighbors_coords((j, i)):
                             to_fire.append(coords)
+                    elif element.type == "strong_fire":
+                        if element.temperature <= 1:
+                            self.replace((j, i), "air")
+                        else:
+                            self.board[j][i].fade()
+                        for coords in self.get_neighbors_coords((j, i)):
+                            to_strong_fire.append(coords)
                     elif element.type in ["acid", "acid_vapor"]:
                         for coords in self.get_neighbors_coords((j, i)):
                             if random.randint(0, 35) == 0:
@@ -316,8 +334,14 @@ class Board:
                             self.replace((j, i), "air")
                     elif element.type == "liquid_wax":
                         if random.randint(0, 50) == 0 and ((j + 1, i) not in self.get_neighbors_coords((j, i)) or
-                        self.board[j + 1][i].weight >= element.weight):
+                                                           self.board[j + 1][i].weight >= element.weight):
                             self.replace((j, i), "wax")
+                    elif element.type == "lava":
+                        neighbors = self.get_neighbors_coords((j, i))
+                        if any([self.board[x[0]][x[1]].type != 'lava' for x in neighbors]):
+                            for coords in neighbors:
+                                to_strong_fire.append(coords)
+                                to_lava.append(coords)
 
                 # физика элемента
                 if self.physics:
@@ -361,11 +385,17 @@ class Board:
         for co in to_fire:
             self.fire(co)
 
+        for co in to_strong_fire:
+            self.strong_fire(co)
+
+        for co in to_lava:
+            self.set_fire_on_burning(co, 120)
+
         for co in to_expwave:
             self.explosion_wave(co)
 
         for co in to_fire_on_burning:
-            self.set_fire_on_burning(co)
+            self.set_fire_on_burning(co, 20)
 
         for co in to_fade:
             self.fade(co)
@@ -394,7 +424,8 @@ class Board:
                 "sawdust": Sandbox.GameObjects.Sawdust(), "methane": Sandbox.GameObjects.Methane(),
                 "wick": Sandbox.GameObjects.Wick(), "liquid_nitrogen": Sandbox.GameObjects.LNitrogen(),
                 "nitrogen": Sandbox.GameObjects.Nitrogen(), "wax": Sandbox.GameObjects.Wax(),
-                "liquid_wax": Sandbox.GameObjects.LWax()}[m_type]
+                "liquid_wax": Sandbox.GameObjects.LWax(), "stone": Sandbox.GameObjects.Stone(),
+                "strong_fire": Sandbox.GameObjects.StrongFire(5), "lava": Sandbox.GameObjects.Lava()}[m_type]
 
 
 class ManageMenu:
@@ -442,6 +473,9 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (50, 250), (40, 40), "liquid_nitrogen_icon.png",
                                               "M", "liquid_nitrogen"))
         self.buttons.append(ManageMenu.Button(self, (95, 250), (40, 40), "wax_icon.png", "M", "wax"))
+        self.buttons.append(ManageMenu.Button(self, (140, 250), (40, 40), "empty.png", "M", "stone"))
+        self.buttons.append(ManageMenu.Button(self, (185, 250), (40, 40), "empty.png", "M", "strong_fire"))
+        self.buttons.append(ManageMenu.Button(self, (5, 295), (40, 40), "empty.png", "M", "lava"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 630), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 630), (40, 40), "pause_icon.png", "CT", "pause"))
@@ -794,7 +828,7 @@ class Sandbox:
 
             def fade(self):
                 self.temperature -= 1
-                self.color = {4: [194, 56, 6], 3: [161, 41, 8], 2: [135, 31, 12], 1: [102, 9, 9]}[self.temperature]
+                self.color = gradient_color([222, 89, 22], [61, 12, 12], self.temperature * 20)
 
         class Acid(Liquid):
             def __init__(self):
@@ -1007,6 +1041,42 @@ class Sandbox:
                 self.durability = 1
                 self.soluble = True
                 self.can_be_freezed = True
+
+        class Stone(Solid):
+            def __init__(self):
+                super().__init__()
+                self.type = "stone"
+                self.color = approximate_color(55, 63, 67, 4)
+                self.weight = 20
+                self.durability = 2
+                self.soluble = True
+                self.can_be_freezed = True
+
+        class StrongFire(Special):
+            def __init__(self, temperature):
+                super().__init__()
+                self.type = "strong_fire"
+                self.color = [30, 144, 255]
+                self.weight = -100
+                self.temperature = temperature
+                self.soluble = False
+                self.durability = 1
+                self.can_be_freezed = False
+
+            def fade(self):
+                self.temperature -= 1
+                self.color = gradient_color([30, 144, 255], [12, 16, 61], self.temperature * 20)
+
+        class Lava(Liquid):
+            def __init__(self):
+                super().__init__()
+                self.type = "lava"
+                self.color = approximate_color(227, 95, 0, 10)
+                self.weight = 9
+                self.durability = 1
+                self.soluble = False
+                self.can_be_freezed = False
+
 
 
 sandbox = Sandbox()
