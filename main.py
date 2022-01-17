@@ -179,6 +179,12 @@ class Board:
             if ("air" not in neighbors and "fire" not in neighbors) or "salt_water" in neighbors or \
                     "water" in neighbors or "vapor" in neighbors or "liquid_nitrogen" in neighbors:
                 self.board[coords[0]][coords[1]].fade()
+        elif self.board[coords[0]][coords[1]].type == "lava":
+            neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
+            if "acid_vapor" in neighbors or "vapor" in neighbors or "water" in neighbors or "acid" in neighbors or \
+                    "salt_water" in neighbors:
+                if random.randint(0, 10) == 0:
+                    self.replace(coords, "stone")
 
     def set_fire_on_burning(self, coords, chance):
         if self.board[coords[0]][coords[1]].type == "air" and random.randint(0, chance) == 0:
@@ -337,6 +343,7 @@ class Board:
                                                            self.board[j + 1][i].weight >= element.weight):
                             self.replace((j, i), "wax")
                     elif element.type == "lava":
+                        to_fade.append((j, i))
                         neighbors = self.get_neighbors_coords((j, i))
                         if any([self.board[x[0]][x[1]].type != 'lava' for x in neighbors]):
                             for coords in neighbors:
@@ -378,6 +385,8 @@ class Board:
                                 to_switch.append(((j, i), (j, i + random.choice(step_r_l))))
 
         # Преимущества происходящих событий во время одного тика
+        for co in to_fade:
+            self.fade(co)
 
         for co in to_switch:
             self.switch(co[0], co[1])
@@ -396,9 +405,6 @@ class Board:
 
         for co in to_fire_on_burning:
             self.set_fire_on_burning(co, 20)
-
-        for co in to_fade:
-            self.fade(co)
 
         for co in to_salt:
             self.salt(co)
@@ -473,9 +479,9 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (50, 250), (40, 40), "liquid_nitrogen_icon.png",
                                               "M", "liquid_nitrogen"))
         self.buttons.append(ManageMenu.Button(self, (95, 250), (40, 40), "wax_icon.png", "M", "wax"))
-        self.buttons.append(ManageMenu.Button(self, (140, 250), (40, 40), "empty.png", "M", "stone"))
-        self.buttons.append(ManageMenu.Button(self, (185, 250), (40, 40), "empty.png", "M", "strong_fire"))
-        self.buttons.append(ManageMenu.Button(self, (5, 295), (40, 40), "empty.png", "M", "lava"))
+        self.buttons.append(ManageMenu.Button(self, (140, 250), (40, 40), "stone_icon.png", "M", "stone"))
+        self.buttons.append(ManageMenu.Button(self, (185, 250), (40, 40), "strong_fire_icon.png", "M", "strong_fire"))
+        self.buttons.append(ManageMenu.Button(self, (5, 295), (40, 40), "lava_icon.png", "M", "lava"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 630), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 630), (40, 40), "pause_icon.png", "CT", "pause"))
@@ -1071,7 +1077,8 @@ class Sandbox:
             def __init__(self):
                 super().__init__()
                 self.type = "lava"
-                self.color = approximate_color(227, 95, 0, 10)
+                rgc = gradient_color([255, 131, 15], [255, 87, 15], random.randint(10, 91))
+                self.color = approximate_color(rgc[0], rgc[1], rgc[2], 10)
                 self.weight = 9
                 self.durability = 1
                 self.soluble = False
