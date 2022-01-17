@@ -9,7 +9,7 @@ ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 
 def load_image(name, colorkey=None):
-    fullname = os.path.join('Images', name)
+    fullname = os.path.join('data/Images', name)
     # если файл не существует, то выходим
     if not os.path.isfile(fullname):
         print(f"Файл с изображением '{fullname}' не найден")
@@ -442,6 +442,10 @@ class ManageMenu:
         self.top = board.top
         self.all_sprites = pygame.sprite.Group()
         self.buttons = []
+        self.sounds = [pygame.mixer.Sound("data/Sounds/button_activated.mp3"),
+                       pygame.mixer.Sound("data/Sounds/mouse_on_button.mp3")]
+        self.sounds[0].set_volume(0.2)
+        self.sounds[1].set_volume(0.2)
 
         # Значения по умолчанию
 
@@ -586,6 +590,7 @@ class ManageMenu:
         if button is None:
             return
         button.activate()
+        self.sounds[0].play()
 
     def get_click(self, mouse_pos):
         button = self.get_button(mouse_pos)
@@ -593,10 +598,11 @@ class ManageMenu:
 
     def get_motion(self, mouse_pos):
         button = self.get_button(mouse_pos)
-        for btn in self.buttons:
-            btn.mouse_on = False
-        if button is not None:
+        if button is not None and not button.mouse_on:
+            for btn in self.buttons:
+                btn.mouse_on = False
             button.mouse_on = True
+            self.sounds[1].play()
 
 
 class Sandbox:
