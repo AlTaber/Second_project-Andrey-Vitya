@@ -156,7 +156,7 @@ class Board:
                 self.replace(coords, "vapor")
         elif element.type in ["ice", "snow"]:
             self.replace(coords, "water")
-        elif element.type == "gunpowder":
+        elif element.type in ["gunpowder", 'tnt']:
             self.explode(coords)
         elif element.type == "methane":
             self.replace(coords, "fire_5")
@@ -179,12 +179,6 @@ class Board:
             if ("air" not in neighbors and "fire" not in neighbors) or "salt_water" in neighbors or \
                     "water" in neighbors or "vapor" in neighbors or "liquid_nitrogen" in neighbors:
                 self.board[coords[0]][coords[1]].fade()
-        elif self.board[coords[0]][coords[1]].type == "lava":
-            neighbors = [self.board[x[0]][x[1]].type for x in self.get_neighbors_coords(coords)]
-            if "acid_vapor" in neighbors or "vapor" in neighbors or "water" in neighbors or "acid" in neighbors or \
-                    "salt_water" in neighbors:
-                if random.randint(0, 10) == 0:
-                    self.replace(coords, "stone")
 
     def set_fire_on_burning(self, coords, chance):
         if self.board[coords[0]][coords[1]].type == "air" and random.randint(0, chance) == 0:
@@ -229,6 +223,9 @@ class Board:
     def explode(self, coords):
         if self.board[coords[0]][coords[1]].type == "gunpowder":
             self.replace(coords, "explosion_wave_gp")
+        elif self.board[coords[0]][coords[1]].type == "tnt":
+            self.replace(coords, "explosion_wave_tnt")
+
 
     def explosion_wave(self, coords):
         wave = self.board[coords[0]][coords[1]]
@@ -343,7 +340,6 @@ class Board:
                                                            self.board[j + 1][i].weight >= element.weight):
                             self.replace((j, i), "wax")
                     elif element.type == "lava":
-                        to_fade.append((j, i))
                         neighbors = self.get_neighbors_coords((j, i))
                         if any([self.board[x[0]][x[1]].type != 'lava' for x in neighbors]):
                             for coords in neighbors:
@@ -385,8 +381,6 @@ class Board:
                                 to_switch.append(((j, i), (j, i + random.choice(step_r_l))))
 
         # Преимущества происходящих событий во время одного тика
-        for co in to_fade:
-            self.fade(co)
 
         for co in to_switch:
             self.switch(co[0], co[1])
@@ -405,6 +399,9 @@ class Board:
 
         for co in to_fire_on_burning:
             self.set_fire_on_burning(co, 20)
+
+        for co in to_fade:
+            self.fade(co)
 
         for co in to_salt:
             self.salt(co)
@@ -431,7 +428,8 @@ class Board:
                 "wick": Sandbox.GameObjects.Wick(), "liquid_nitrogen": Sandbox.GameObjects.LNitrogen(),
                 "nitrogen": Sandbox.GameObjects.Nitrogen(), "wax": Sandbox.GameObjects.Wax(),
                 "liquid_wax": Sandbox.GameObjects.LWax(), "stone": Sandbox.GameObjects.Stone(),
-                "strong_fire": Sandbox.GameObjects.StrongFire(5), "lava": Sandbox.GameObjects.Lava()}[m_type]
+                "strong_fire": Sandbox.GameObjects.StrongFire(5), "lava": Sandbox.GameObjects.Lava(),
+                "tnt": Sandbox.GameObjects.Tnt(), "explosion_wave_tnt": Sandbox.GameObjects.ExplosionWave(5, 6)}[m_type]
 
 
 class ManageMenu:
@@ -486,6 +484,7 @@ class ManageMenu:
         self.buttons.append(ManageMenu.Button(self, (140, 250), (40, 40), "stone_icon.png", "M", "stone"))
         self.buttons.append(ManageMenu.Button(self, (185, 250), (40, 40), "strong_fire_icon.png", "M", "strong_fire"))
         self.buttons.append(ManageMenu.Button(self, (5, 295), (40, 40), "lava_icon.png", "M", "lava"))
+        self.buttons.append(ManageMenu.Button(self, (50, 295), (40, 40), "tnt_icon.png", "M", "tnt"))
 
         self.buttons.append(ManageMenu.Button(self, (5, 630), (40, 40), "clear_icon.png", "C", "clear"))
         self.buttons.append(ManageMenu.Button(self, (50, 630), (40, 40), "pause_icon.png", "CT", "pause"))
@@ -1083,12 +1082,21 @@ class Sandbox:
             def __init__(self):
                 super().__init__()
                 self.type = "lava"
-                rgc = gradient_color([255, 131, 15], [255, 87, 15], random.randint(10, 91))
-                self.color = approximate_color(rgc[0], rgc[1], rgc[2], 10)
+                self.color = approximate_color(227, 95, 0, 10)
                 self.weight = 9
                 self.durability = 1
                 self.soluble = False
                 self.can_be_freezed = False
+
+        class Tnt(Solid):
+            def __init__(self):
+                super().__init__()
+                self.type = "tnt"
+                self.color = approximate_color(166, 17, 17, 1)
+                self.weight = 20
+                self.durability = 1
+                self.soluble = True
+                self.can_be_freezed = True
 
 
 
